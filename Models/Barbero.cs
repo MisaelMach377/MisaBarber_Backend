@@ -1,0 +1,14 @@
+namespace misabarber.Models;
+
+public class Barbero
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public string Nombre { get; set; } = string.Empty;
+    public string? Telefono { get; set; }
+    public string? FotoUrl { get; set; }
+
+    public string Estado { get; set; } = "Activo"; // Activo | Inactivo
+
+    public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+}

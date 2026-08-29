@@ -1,0 +1,6 @@
+@misabarber_HostAddress = http://localhost:5269
+
+GET {{misabarber_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

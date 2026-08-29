@@ -1,0 +1,18 @@
+namespace misabarber.Models;
+
+public class Servicio
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    public string Nombre { get; set; } = string.Empty; // "Corte clásico", "Barba", etc.
+    public decimal Precio { get; set; }
+
+    // Duración estimada del servicio — CitasController la usa para calcular
+    // el rango [FechaHora, FechaHora + DuracionMinutos) y evitar que se
+    // agenden dos citas al mismo barbero que se pisen en el tiempo.
+    public int DuracionMinutos { get; set; } = 30;
+
+    public string Estado { get; set; } = "Activo"; // Activo | Inactivo
+
+    public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+}
