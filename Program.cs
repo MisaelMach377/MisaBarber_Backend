@@ -6,6 +6,20 @@ using misabarber.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ---- Railway ----
+// Railway no fija un puerto: le pasa uno distinto a cada deploy en la
+// variable PORT y espera que el contenedor escuche justo ahí (además, por
+// defecto Kestrel bindea a localhost, que Railway no puede alcanzar desde
+// afuera -- hace falta 0.0.0.0). Local (dotnet run / Visual Studio) nunca
+// tiene PORT seteada -- ahí manda el profile de launchSettings.json como
+// siempre, esto no le toca nada.
+var puertoRailway = Environment.GetEnvironmentVariable("PORT");
+var esRailway = !string.IsNullOrEmpty(puertoRailway);
+if (esRailway)
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{puertoRailway}");
+}
+
 // ---- Base de datos ----
 builder.Services.AddDbContext<MisaBarberContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
@@ -43,7 +57,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Railway termina el HTTPS en su propio proxy y le manda al contenedor la
+// request ya en HTTP plano -- redirigir acá adentro no suma nada (el
+// usuario ya entró por HTTPS) y sin el middleware de ForwardedHeaders de
+// por medio corre el riesgo clásico de loop de redirección. Local sigue
+// redirigiendo como siempre.
+if (!esRailway)
+{
+    app.UseHttpsRedirection();
+}
 
 // Sirve wwwroot/uploads/... (fotos de clientes/barberos que sube
 // UploadController) como archivos estáticos públicos.

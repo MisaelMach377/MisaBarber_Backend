@@ -11,3 +11,6 @@ obj/
 ## Sistema
 .DS_Store
 Thumbs.db
+
+## Secretos locales (nunca a git -- ver railway.secrets.json)
+railway.secrets.json
