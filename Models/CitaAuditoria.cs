@@ -12,6 +12,14 @@ public class CitaAuditoria
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid? CitaId { get; set; }
 
+    // A qué barbería pertenece este registro (multi-tenant, ver
+    // Models/Negocio.cs). Se guarda directo (y no se infiere por CitaId)
+    // porque CitaId es una referencia "blanda" que puede apuntar a una
+    // cita ya borrada -- sin este campo no habría forma confiable de
+    // filtrar el historial de auditoría por Negocio.
+    public Guid NegocioId { get; set; }
+    public Negocio? Negocio { get; set; }
+
     // "Creada" | "Editada" | "Estado: Pendiente -> Confirmada" | "Eliminada"
     public string Accion { get; set; } = string.Empty;
     public string? Detalle { get; set; }

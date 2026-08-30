@@ -21,19 +21,21 @@ public class ServiciosController : ControllerBase
         _db = db;
     }
 
+    private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
+
     private static ServicioDto ToDto(Servicio s) => new(s.Id, s.Nombre, s.Precio, s.DuracionMinutos, s.Estado, s.FechaCreacion);
 
     [HttpGet]
     public async Task<ActionResult<List<ServicioDto>>> GetAll()
     {
-        var lista = await _db.Servicios.OrderBy(s => s.Nombre).ToListAsync();
+        var lista = await _db.Servicios.Where(s => s.NegocioId == NegocioId).OrderBy(s => s.Nombre).ToListAsync();
         return Ok(lista.Select(ToDto));
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<ServicioDto>> GetById(Guid id)
     {
-        var s = await _db.Servicios.FindAsync(id);
+        var s = await _db.Servicios.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (s is null) return NotFound();
         return Ok(ToDto(s));
     }
@@ -50,6 +52,7 @@ public class ServiciosController : ControllerBase
 
         var servicio = new Servicio
         {
+            NegocioId = NegocioId,
             Nombre = dto.Nombre,
             Precio = dto.Precio,
             DuracionMinutos = dto.DuracionMinutos,
@@ -64,7 +67,7 @@ public class ServiciosController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<ServicioDto>> Update(Guid id, ServicioCreateDto dto)
     {
-        var s = await _db.Servicios.FindAsync(id);
+        var s = await _db.Servicios.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (s is null) return NotFound();
 
         if (string.IsNullOrWhiteSpace(dto.Nombre))
@@ -88,7 +91,7 @@ public class ServiciosController : ControllerBase
         if (!EstadosValidos.Contains(dto.Estado))
             return BadRequest("Estado no válido.");
 
-        var s = await _db.Servicios.FindAsync(id);
+        var s = await _db.Servicios.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (s is null) return NotFound();
 
         s.Estado = dto.Estado;
@@ -99,7 +102,7 @@ public class ServiciosController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var s = await _db.Servicios.FindAsync(id);
+        var s = await _db.Servicios.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (s is null) return NotFound();
 
         var tieneHistorial = await _db.CitaServicios.AnyAsync(cs => cs.ServicioId == id);

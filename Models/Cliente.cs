@@ -7,6 +7,12 @@ public class Cliente
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    // A qué barbería pertenece este cliente (multi-tenant, ver
+    // Models/Negocio.cs). Todo controller que toque Clientes filtra
+    // siempre por el NegocioId del usuario logueado.
+    public Guid NegocioId { get; set; }
+    public Negocio? Negocio { get; set; }
+
     public string Nombre { get; set; } = string.Empty;
     public string? Telefono { get; set; }
     public string? Email { get; set; }

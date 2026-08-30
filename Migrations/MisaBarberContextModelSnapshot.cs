@@ -38,6 +38,9 @@ namespace misabarber.Migrations
                     b.Property<string>("FotoUrl")
                         .HasColumnType("text");
 
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("text");
@@ -46,6 +49,8 @@ namespace misabarber.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("NegocioId");
 
                     b.ToTable("Barberos");
                 });
@@ -72,12 +77,17 @@ namespace misabarber.Migrations
                     b.Property<DateTime>("FechaHora")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Notas")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
+
+                    b.HasIndex("NegocioId");
 
                     b.HasIndex("BarberoId", "FechaHora");
 
@@ -114,6 +124,9 @@ namespace misabarber.Migrations
                     b.Property<DateTime>("FechaHoraEvento")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ServicioNombre")
                         .IsRequired()
                         .HasColumnType("text");
@@ -123,6 +136,8 @@ namespace misabarber.Migrations
                     b.HasIndex("CitaId");
 
                     b.HasIndex("FechaHoraEvento");
+
+                    b.HasIndex("NegocioId");
 
                     b.ToTable("CitasAuditoria");
                 });
@@ -161,6 +176,9 @@ namespace misabarber.Migrations
                     b.Property<string>("FotoUrl")
                         .HasColumnType("text");
 
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("text");
@@ -170,7 +188,61 @@ namespace misabarber.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("NegocioId");
+
                     b.ToTable("Clientes");
+                });
+
+            modelBuilder.Entity("misabarber.Models.Negocio", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ColorPrimario")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("#2563eb");
+
+                    b.Property<bool>("EsPrincipal")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("LogoUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ModulosBarbero")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Citas,Clientes,Historial");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Plan")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Pro");
+
+                    b.Property<string>("Slug")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("Negocios");
                 });
 
             modelBuilder.Entity("misabarber.Models.Servicio", b =>
@@ -189,6 +261,9 @@ namespace misabarber.Migrations
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("text");
@@ -198,6 +273,8 @@ namespace misabarber.Migrations
                         .HasColumnType("numeric(10,2)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("NegocioId");
 
                     b.ToTable("Servicios");
                 });
@@ -262,6 +339,9 @@ namespace misabarber.Migrations
                     b.Property<string>("FotoUrl")
                         .HasColumnType("text");
 
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Nombre")
                         .IsRequired()
                         .HasColumnType("text");
@@ -280,10 +360,23 @@ namespace misabarber.Migrations
 
                     b.HasIndex("ClienteId");
 
-                    b.HasIndex("Email")
+                    b.HasIndex("NegocioId");
+
+                    b.HasIndex("NegocioId", "Email")
                         .IsUnique();
 
                     b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("misabarber.Models.Barbero", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
                 });
 
             modelBuilder.Entity("misabarber.Models.Cita", b =>
@@ -300,9 +393,28 @@ namespace misabarber.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Barbero");
 
                     b.Navigation("Cliente");
+
+                    b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.CitaAuditoria", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
                 });
 
             modelBuilder.Entity("misabarber.Models.CitaServicio", b =>
@@ -322,6 +434,28 @@ namespace misabarber.Migrations
                     b.Navigation("Cita");
 
                     b.Navigation("Servicio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.Cliente", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.Servicio", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
                 });
 
             modelBuilder.Entity("misabarber.Models.SuscripcionPush", b =>
@@ -347,9 +481,17 @@ namespace misabarber.Migrations
                         .HasForeignKey("ClienteId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Barbero");
 
                     b.Navigation("Cliente");
+
+                    b.Navigation("Negocio");
                 });
 
             modelBuilder.Entity("misabarber.Models.Cita", b =>

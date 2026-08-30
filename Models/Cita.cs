@@ -4,6 +4,16 @@ public class Cita
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    // A qué barbería pertenece esta cita (multi-tenant, ver
+    // Models/Negocio.cs). Se guarda acá TAMBIÉN (y no solo se infiere por
+    // Cliente/Barbero) para poder filtrar y auditar directo sin tener que
+    // hacer join, y como segunda red de seguridad: aunque alguien lograra
+    // mandar un ClienteId/BarberoId de otro Negocio, HayConflictoDeHorario
+    // y el resto de las queries de CitasController igual filtran por el
+    // NegocioId del usuario logueado.
+    public Guid NegocioId { get; set; }
+    public Negocio? Negocio { get; set; }
+
     public Guid ClienteId { get; set; }
     public Cliente? Cliente { get; set; }
 

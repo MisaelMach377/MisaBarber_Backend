@@ -21,19 +21,21 @@ public class ClientesController : ControllerBase
         _db = db;
     }
 
+    private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
+
     private static ClienteDto ToDto(Cliente c) => new(c.Id, c.Nombre, c.Telefono, c.Email, c.FotoUrl, c.Estado, c.FechaCreacion);
 
     [HttpGet]
     public async Task<ActionResult<List<ClienteDto>>> GetAll()
     {
-        var lista = await _db.Clientes.OrderBy(c => c.Nombre).ToListAsync();
+        var lista = await _db.Clientes.Where(c => c.NegocioId == NegocioId).OrderBy(c => c.Nombre).ToListAsync();
         return Ok(lista.Select(ToDto));
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<ClienteDto>> GetById(Guid id)
     {
-        var c = await _db.Clientes.FindAsync(id);
+        var c = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (c is null) return NotFound();
         return Ok(ToDto(c));
     }
@@ -49,6 +51,7 @@ public class ClientesController : ControllerBase
 
         var cliente = new Cliente
         {
+            NegocioId = NegocioId,
             Nombre = dto.Nombre,
             Telefono = dto.Telefono,
             Email = dto.Email,
@@ -64,7 +67,7 @@ public class ClientesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<ClienteDto>> Update(Guid id, ClienteCreateDto dto)
     {
-        var c = await _db.Clientes.FindAsync(id);
+        var c = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (c is null) return NotFound();
 
         if (string.IsNullOrWhiteSpace(dto.Nombre))
@@ -89,7 +92,7 @@ public class ClientesController : ControllerBase
         if (!EstadosValidos.Contains(dto.Estado))
             return BadRequest("Estado no válido.");
 
-        var c = await _db.Clientes.FindAsync(id);
+        var c = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (c is null) return NotFound();
 
         c.Estado = dto.Estado;
@@ -100,7 +103,7 @@ public class ClientesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var c = await _db.Clientes.FindAsync(id);
+        var c = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (c is null) return NotFound();
 
         // Igual que ClienteFinal en MisaDesk: si ya tiene citas, no se borra

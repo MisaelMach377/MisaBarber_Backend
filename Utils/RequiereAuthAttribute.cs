@@ -12,7 +12,13 @@ namespace misabarber.Utils;
 //
 // Uso: [RequiereAuth] en la clase o la acción para exigir cualquier sesión
 // válida, o [RequiereAuth(Rol = "Admin")] para restringir a un rol
-// puntual (ver UsuariosController).
+// puntual (ver UsuariosController). Un SuperAdmin siempre cumple con
+// Rol = "Admin" -- tiene todos los poderes de Admin en su propio Negocio
+// más el de administrar otros negocios (ver Models/Usuario.cs) -- así que
+// no hay que duplicar cada [RequiereAuth(Rol = "Admin")] del sistema para
+// dejarlo pasar también a él. [RequiereAuth(Rol = "SuperAdmin")] (ver
+// NegociosController) en cambio exige el rol exacto: ni un Admin normal
+// entra ahí.
 public class RequiereAuthAttribute : Attribute, IAuthorizationFilter
 {
     public string? Rol { get; set; }
@@ -27,7 +33,11 @@ public class RequiereAuthAttribute : Attribute, IAuthorizationFilter
             return;
         }
 
-        if (Rol is not null && usuario.Rol != Rol)
+        var cumpleRol = Rol is null
+            || usuario.Rol == Rol
+            || (Rol == "Admin" && usuario.Rol == "SuperAdmin");
+
+        if (!cumpleRol)
         {
             context.Result = new Microsoft.AspNetCore.Mvc.ObjectResult(
                 "No tienes permiso para hacer esto.")

@@ -32,6 +32,23 @@ public class CitasController : ControllerBase
         _notificaciones = notificaciones;
     }
 
+    // A qué barbería pertenece el usuario logueado (multi-tenant, ver
+    // Models/Negocio.cs) -- TODA query de este controller filtra por acá,
+    // nunca por un negocioId que pudiera mandar el front.
+    private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
+
+    // Historial/Reportes (Reportes.jsx reusa este mismo endpoint, ver su
+    // comentario en GetHistorial) es un módulo de Plan Pro (ver
+    // Utils/Modulos.cs) -- pero SOLO para el panel de staff. Un Cliente
+    // consultando SUS PROPIAS citas pasadas en MiCuenta.jsx no tiene nada
+    // que ver con el Plan de la barbería, así que nunca se lo bloquea acá
+    // (ver el chequeo de Rol antes de llamar a esto en cada endpoint).
+    private async Task<bool> PlanPermiteHistorial()
+    {
+        var plan = await _db.Negocios.Where(n => n.Id == NegocioId).Select(n => n.Plan).FirstOrDefaultAsync();
+        return Modulos.DeNegocio(plan).Contains("Historial");
+    }
+
     // Una cita ahora puede llevar varios servicios (ej. "Corte" + "Barba"),
     // así que el total de precio/duración se calcula sumando los de la
     // lista en vez de leerlo de un solo campo -- ver Models/Cita.cs y
@@ -79,6 +96,7 @@ public class CitasController : ControllerBase
 
     private IQueryable<Cita> ConDatos() =>
         _db.Citas
+            .Where(c => c.NegocioId == NegocioId)
             .Include(c => c.Cliente)
             .Include(c => c.Barbero)
             .Include(c => c.CitaServicios).ThenInclude(cs => cs.Servicio);
@@ -95,6 +113,7 @@ public class CitasController : ControllerBase
     {
         _db.CitasAuditoria.Add(new CitaAuditoria
         {
+            NegocioId = NegocioId,
             CitaId = cita.Id,
             Accion = accion,
             Detalle = detalle,
@@ -131,7 +150,7 @@ public class CitasController : ControllerBase
         // Un Barbero solo ve sus propias citas — filtrado del lado del
         // servidor con el BarberoId que viene en SU token, nunca confiando
         // en un query param que el propio front pudiera mandar mal armado.
-        // Admin ve todas.
+        // Admin ve todas (de SU negocio -- ver ConDatos()).
         var usuario = HttpContext.UsuarioActual()!;
         if (usuario.Rol == "Barbero")
             query = query.Where(c => c.BarberoId == usuario.BarberoId);
@@ -156,11 +175,19 @@ public class CitasController : ControllerBase
         [FromQuery] Guid? barberoId,
         [FromQuery] string? estado)
     {
+        var usuario = HttpContext.UsuarioActual()!;
+
+        // El Plan de la barbería solo restringe al STAFF (Admin/Barbero
+        // viendo el módulo Historial/Reportes del panel) -- un Cliente
+        // consultando sus propias citas en MiCuenta.jsx nunca se bloquea
+        // acá, ver el comentario de PlanPermiteHistorial más arriba.
+        if (usuario.Rol != "Cliente" && !await PlanPermiteHistorial())
+            return Forbid();
+
         var query = ConDatos();
 
         // Mismo criterio que en GetAll: un Barbero solo puede ver su
         // propio historial, sin importar qué barberoId venga en la query.
-        var usuario = HttpContext.UsuarioActual()!;
         var barberoIdEfectivo = usuario.Rol == "Barbero" ? usuario.BarberoId : barberoId;
         var clienteIdEfectivo = usuario.Rol == "Cliente" ? usuario.ClienteId : clienteId;
 
@@ -193,8 +220,9 @@ public class CitasController : ControllerBase
         [FromQuery] Guid? citaId)
     {
         if (HttpContext.UsuarioActual()!.Rol == "Cliente") return Forbid();
+        if (!await PlanPermiteHistorial()) return Forbid();
 
-        var query = _db.CitasAuditoria.AsQueryable();
+        var query = _db.CitasAuditoria.Where(a => a.NegocioId == NegocioId);
 
         if (desde.HasValue)
             query = query.Where(a => a.FechaHoraEvento >= desde.Value.Date);
@@ -230,11 +258,11 @@ public class CitasController : ControllerBase
             return BadRequest("Elige al menos un servicio.");
 
         var idsUnicos = servicioIds.Distinct().ToList();
-        var servicios = await _db.Servicios.Where(s => idsUnicos.Contains(s.Id)).ToListAsync();
+        var servicios = await _db.Servicios.Where(s => idsUnicos.Contains(s.Id) && s.NegocioId == NegocioId).ToListAsync();
         if (servicios.Count != idsUnicos.Count)
             return BadRequest("Uno o más servicios no existen.");
 
-        var barberoExiste = await _db.Barberos.AnyAsync(b => b.Id == barberoId);
+        var barberoExiste = await _db.Barberos.AnyAsync(b => b.Id == barberoId && b.NegocioId == NegocioId);
         if (!barberoExiste) return BadRequest("El barbero no existe.");
 
         var dia = fecha.Date;
@@ -308,15 +336,16 @@ public class CitasController : ControllerBase
     }
 
     // Valida la lista de servicios que llega en el DTO (no vacía, todos
-    // existen) y devuelve las entidades ya cargadas -- Create y Update
-    // repiten exactamente esta validación, así que vive en un solo lugar.
+    // existen DENTRO del negocio del usuario) y devuelve las entidades ya
+    // cargadas -- Create y Update repiten exactamente esta validación, así
+    // que vive en un solo lugar.
     private async Task<(List<Servicio>? servicios, ActionResult? error)> ValidarServicios(List<Guid>? servicioIds)
     {
         if (servicioIds is null || servicioIds.Count == 0)
             return (null, BadRequest("Elige al menos un servicio."));
 
         var idsUnicos = servicioIds.Distinct().ToList();
-        var servicios = await _db.Servicios.Where(s => idsUnicos.Contains(s.Id)).ToListAsync();
+        var servicios = await _db.Servicios.Where(s => idsUnicos.Contains(s.Id) && s.NegocioId == NegocioId).ToListAsync();
         if (servicios.Count != idsUnicos.Count)
             return (null, BadRequest("Uno o más servicios no existen."));
 
@@ -330,10 +359,10 @@ public class CitasController : ControllerBase
         if (usuario.Rol == "Cliente" && usuario.ClienteId is null) return Unauthorized();
         var clienteId = usuario.Rol == "Cliente" ? usuario.ClienteId!.Value : dto.ClienteId;
 
-        var cliente = await _db.Clientes.FindAsync(clienteId);
+        var cliente = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == clienteId && x.NegocioId == NegocioId);
         if (cliente is null) return BadRequest("El cliente no existe.");
 
-        var barbero = await _db.Barberos.FindAsync(dto.BarberoId);
+        var barbero = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == dto.BarberoId && x.NegocioId == NegocioId);
         if (barbero is null) return BadRequest("El barbero no existe.");
 
         var (servicios, errorServicios) = await ValidarServicios(dto.ServicioIds);
@@ -347,6 +376,7 @@ public class CitasController : ControllerBase
 
         var cita = new Cita
         {
+            NegocioId = NegocioId,
             ClienteId = clienteId,
             BarberoId = dto.BarberoId,
             FechaHora = dto.FechaHora,
@@ -375,10 +405,10 @@ public class CitasController : ControllerBase
         var cita = await ConDatos().FirstOrDefaultAsync(x => x.Id == id);
         if (cita is null) return NotFound();
 
-        var cliente = await _db.Clientes.FindAsync(dto.ClienteId);
+        var cliente = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == dto.ClienteId && x.NegocioId == NegocioId);
         if (cliente is null) return BadRequest("El cliente no existe.");
 
-        var barbero = await _db.Barberos.FindAsync(dto.BarberoId);
+        var barbero = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == dto.BarberoId && x.NegocioId == NegocioId);
         if (barbero is null) return BadRequest("El barbero no existe.");
 
         var (servicios, errorServicios) = await ValidarServicios(dto.ServicioIds);

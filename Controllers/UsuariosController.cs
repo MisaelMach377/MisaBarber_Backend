@@ -11,13 +11,15 @@ namespace misabarber.Controllers;
 // propósito: un Barbero (la ficha operativa que se ve en la agenda, con
 // foto/teléfono/estado) no siempre tiene una cuenta de login todavía, y
 // crear/borrar una cuenta acá no debería tocar su ficha de barbero. Solo
-// Admin entra (ver RequiereAuth a nivel de clase).
+// Admin entra (ver RequiereAuth a nivel de clase), y siempre dentro de SU
+// propio Negocio -- un Admin de una barbería alquilada nunca ve ni puede
+// tocar los usuarios de otra (ver NegocioId en cada query).
 [ApiController]
 [Route("api/usuarios")]
 [RequiereAuth(Rol = "Admin")]
 public class UsuariosController : ControllerBase
 {
-    private static readonly string[] RolesValidos = { "Admin", "Barbero" };
+    private static readonly string[] RolesValidos = { "SuperAdmin", "Admin", "Barbero" };
     private static readonly string[] EstadosValidos = { "Activo", "Inactivo" };
 
     private readonly MisaBarberContext _db;
@@ -27,11 +29,14 @@ public class UsuariosController : ControllerBase
         _db = db;
     }
 
-    private static UsuarioDto ToDto(Usuario u) => new(
-        u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion
+    private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
+
+    private UsuarioDto ToDto(Usuario u) => new(
+        u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
+        "", null, "#2563eb", "Pro", Array.Empty<string>()
     );
 
-    private IQueryable<Usuario> ConBarbero() => _db.Usuarios.Include(u => u.Barbero);
+    private IQueryable<Usuario> ConBarbero() => _db.Usuarios.Include(u => u.Barbero).Where(u => u.NegocioId == NegocioId);
 
     [HttpGet]
     public async Task<ActionResult<List<UsuarioDto>>> GetAll()
@@ -57,11 +62,17 @@ public class UsuariosController : ControllerBase
             return BadRequest("El correo es obligatorio.");
         if (!RolesValidos.Contains(dto.Rol))
             return BadRequest("Rol no válido.");
+        // Solo un SuperAdmin puede crear otra cuenta SuperAdmin -- un Admin
+        // normal no se lo puede dar a sí mismo eligiéndolo del select
+        // (el front ya lo oculta si no eres SuperAdmin, esto es la
+        // validación real del lado del servidor).
+        if (dto.Rol == "SuperAdmin" && HttpContext.UsuarioActual()!.Rol != "SuperAdmin")
+            return Forbid();
         if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
             return BadRequest("La contraseña debe tener al menos 6 caracteres.");
 
         var email = dto.Email.Trim().ToLower();
-        var yaExiste = await _db.Usuarios.AnyAsync(u => u.Email.ToLower() == email);
+        var yaExiste = await _db.Usuarios.AnyAsync(u => u.NegocioId == NegocioId && u.Email.ToLower() == email);
         if (yaExiste)
             return BadRequest("Ya existe un usuario con ese correo.");
 
@@ -69,13 +80,14 @@ public class UsuariosController : ControllerBase
         {
             if (dto.BarberoId is null)
                 return BadRequest("Elige a qué barbero corresponde esta cuenta.");
-            var barberoExiste = await _db.Barberos.AnyAsync(b => b.Id == dto.BarberoId);
+            var barberoExiste = await _db.Barberos.AnyAsync(b => b.Id == dto.BarberoId && b.NegocioId == NegocioId);
             if (!barberoExiste)
                 return BadRequest("El barbero no existe.");
         }
 
         var usuario = new Usuario
         {
+            NegocioId = NegocioId,
             Nombre = dto.Nombre,
             Email = dto.Email.Trim(),
             PasswordHash = PasswordHasher.Hash(dto.Password),
@@ -103,9 +115,11 @@ public class UsuariosController : ControllerBase
             return BadRequest("El correo es obligatorio.");
         if (!RolesValidos.Contains(dto.Rol))
             return BadRequest("Rol no válido.");
+        if (dto.Rol == "SuperAdmin" && HttpContext.UsuarioActual()!.Rol != "SuperAdmin")
+            return Forbid();
 
         var email = dto.Email.Trim().ToLower();
-        var otroConEseCorreo = await _db.Usuarios.AnyAsync(u => u.Id != id && u.Email.ToLower() == email);
+        var otroConEseCorreo = await _db.Usuarios.AnyAsync(u => u.Id != id && u.NegocioId == NegocioId && u.Email.ToLower() == email);
         if (otroConEseCorreo)
             return BadRequest("Ya existe otro usuario con ese correo.");
 
@@ -113,7 +127,7 @@ public class UsuariosController : ControllerBase
         {
             if (dto.BarberoId is null)
                 return BadRequest("Elige a qué barbero corresponde esta cuenta.");
-            var barberoExiste = await _db.Barberos.AnyAsync(b => b.Id == dto.BarberoId);
+            var barberoExiste = await _db.Barberos.AnyAsync(b => b.Id == dto.BarberoId && b.NegocioId == NegocioId);
             if (!barberoExiste)
                 return BadRequest("El barbero no existe.");
         }
@@ -159,7 +173,7 @@ public class UsuariosController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.ContrasenaNueva) || dto.ContrasenaNueva.Length < 6)
             return BadRequest("La nueva contraseña debe tener al menos 6 caracteres.");
 
-        var usuario = await _db.Usuarios.FindAsync(id);
+        var usuario = await _db.Usuarios.FirstOrDefaultAsync(u => u.Id == id && u.NegocioId == NegocioId);
         if (usuario is null) return NotFound();
 
         usuario.PasswordHash = PasswordHasher.Hash(dto.ContrasenaNueva);
@@ -170,7 +184,7 @@ public class UsuariosController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var usuario = await _db.Usuarios.FindAsync(id);
+        var usuario = await _db.Usuarios.FirstOrDefaultAsync(u => u.Id == id && u.NegocioId == NegocioId);
         if (usuario is null) return NotFound();
 
         if (usuario.Id == HttpContext.UsuarioActual()!.Id)

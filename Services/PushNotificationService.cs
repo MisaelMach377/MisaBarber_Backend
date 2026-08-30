@@ -44,8 +44,8 @@ public class PushNotificationService
     public async Task NotificarNuevaCita(Cita cita, Guid actorUsuarioId)
     {
         var destinatarios = await _db.Usuarios
-            .Where(u => u.Estado == "Activo" && u.Id != actorUsuarioId)
-            .Where(u => u.Rol == "Admin" || (u.Rol == "Barbero" && u.BarberoId == cita.BarberoId))
+            .Where(u => u.NegocioId == cita.NegocioId && u.Estado == "Activo" && u.Id != actorUsuarioId)
+            .Where(u => u.Rol == "Admin" || u.Rol == "SuperAdmin" || (u.Rol == "Barbero" && u.BarberoId == cita.BarberoId))
             .Select(u => u.Id)
             .ToListAsync();
 
@@ -64,8 +64,8 @@ public class PushNotificationService
         if (actorRol == "Cliente")
         {
             var destinatarios = await _db.Usuarios
-                .Where(u => u.Estado == "Activo" && u.Id != actorUsuarioId)
-                .Where(u => u.Rol == "Admin" || (u.Rol == "Barbero" && u.BarberoId == cita.BarberoId))
+                .Where(u => u.NegocioId == cita.NegocioId && u.Estado == "Activo" && u.Id != actorUsuarioId)
+                .Where(u => u.Rol == "Admin" || u.Rol == "SuperAdmin" || (u.Rol == "Barbero" && u.BarberoId == cita.BarberoId))
                 .Select(u => u.Id)
                 .ToListAsync();
 
@@ -74,7 +74,7 @@ public class PushNotificationService
         }
 
         var clienteUsuarioId = await _db.Usuarios
-            .Where(u => u.Estado == "Activo" && u.Rol == "Cliente" && u.ClienteId == cita.ClienteId && u.Id != actorUsuarioId)
+            .Where(u => u.NegocioId == cita.NegocioId && u.Estado == "Activo" && u.Rol == "Cliente" && u.ClienteId == cita.ClienteId && u.Id != actorUsuarioId)
             .Select(u => (Guid?)u.Id)
             .FirstOrDefaultAsync();
 

@@ -110,14 +110,37 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<MisaBarberContext>();
     await db.Database.MigrateAsync();
 
+    // Negocio principal: la barbería original (la mía), la que entra por
+    // /login sin slug (ver Models/Negocio.cs y AuthController.ResolverNegocio).
+    // Multi-tenant: cada barbería que alquile el sistema es OTRO Negocio,
+    // creado desde NegociosController -- este seed es solo para que el
+    // principal exista siempre, incluso en una base de datos nueva.
+    var negocioPrincipal = await db.Negocios.FirstOrDefaultAsync(n => n.EsPrincipal);
+    if (negocioPrincipal is null)
+    {
+        negocioPrincipal = new Negocio
+        {
+            Nombre = "MisaBarber",
+            Slug = null,
+            EsPrincipal = true,
+        };
+        db.Negocios.Add(negocioPrincipal);
+        await db.SaveChangesAsync();
+    }
+
     if (!await db.Usuarios.AnyAsync())
     {
         db.Usuarios.Add(new Usuario
         {
+            NegocioId = negocioPrincipal.Id,
             Nombre = "Administrador",
             Email = "admin@misabarber.com",
             PasswordHash = PasswordHasher.Hash("MisaBarber2026!"),
-            Rol = "Admin",
+            // SuperAdmin: administra su propio negocio (el principal) IGUAL
+            // que un Admin, más el poder extra de crear/suspender OTROS
+            // negocios alquilados desde NegociosController -- ver el
+            // comentario sobre Rol en Models/Usuario.cs.
+            Rol = "SuperAdmin",
         });
         await db.SaveChangesAsync();
     }

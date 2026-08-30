@@ -21,19 +21,21 @@ public class BarberosController : ControllerBase
         _db = db;
     }
 
+    private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
+
     private static BarberoDto ToDto(Barbero b) => new(b.Id, b.Nombre, b.Telefono, b.FotoUrl, b.Estado, b.FechaCreacion);
 
     [HttpGet]
     public async Task<ActionResult<List<BarberoDto>>> GetAll()
     {
-        var lista = await _db.Barberos.OrderBy(b => b.Nombre).ToListAsync();
+        var lista = await _db.Barberos.Where(b => b.NegocioId == NegocioId).OrderBy(b => b.Nombre).ToListAsync();
         return Ok(lista.Select(ToDto));
     }
 
     [HttpGet("{id}")]
     public async Task<ActionResult<BarberoDto>> GetById(Guid id)
     {
-        var b = await _db.Barberos.FindAsync(id);
+        var b = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (b is null) return NotFound();
         return Ok(ToDto(b));
     }
@@ -49,6 +51,7 @@ public class BarberosController : ControllerBase
 
         var barbero = new Barbero
         {
+            NegocioId = NegocioId,
             Nombre = dto.Nombre,
             Telefono = dto.Telefono,
             FotoUrl = dto.FotoUrl,
@@ -63,7 +66,7 @@ public class BarberosController : ControllerBase
     [HttpPut("{id}")]
     public async Task<ActionResult<BarberoDto>> Update(Guid id, BarberoCreateDto dto)
     {
-        var b = await _db.Barberos.FindAsync(id);
+        var b = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (b is null) return NotFound();
 
         if (string.IsNullOrWhiteSpace(dto.Nombre))
@@ -87,7 +90,7 @@ public class BarberosController : ControllerBase
         if (!EstadosValidos.Contains(dto.Estado))
             return BadRequest("Estado no válido.");
 
-        var b = await _db.Barberos.FindAsync(id);
+        var b = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (b is null) return NotFound();
 
         b.Estado = dto.Estado;
@@ -98,7 +101,7 @@ public class BarberosController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var b = await _db.Barberos.FindAsync(id);
+        var b = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (b is null) return NotFound();
 
         var tieneHistorial = await _db.Citas.AnyAsync(x => x.BarberoId == id);

@@ -5,8 +5,17 @@ using System.Text.Json;
 namespace misabarber.Utils;
 
 // Claims mínimos que viajan en el token — lo justo para saber quién hace
-// el request y qué rol tiene sin ir a la base de datos en cada llamada.
-public record UsuarioClaims(Guid Id, string Nombre, string Email, string Rol, Guid? BarberoId, Guid? ClienteId);
+// el request, de qué barbería es (multi-tenant, ver Models/Negocio.cs) y
+// qué rol tiene sin ir a la base de datos en cada llamada.
+public record UsuarioClaims(
+    Guid Id,
+    string Nombre,
+    string Email,
+    string Rol,
+    Guid NegocioId,
+    Guid? BarberoId,
+    Guid? ClienteId
+);
 
 // JWT (HS256) armado a mano con primitivas nativas de .NET (HMACSHA256 +
 // System.Text.Json) en vez del paquete
@@ -32,6 +41,7 @@ public static class JwtHelper
             nombre = usuario.Nombre,
             email = usuario.Email,
             rol = usuario.Rol,
+            negocioId = usuario.NegocioId,
             barberoId = usuario.BarberoId,
             clienteId = usuario.ClienteId,
             iat = ahora.ToUnixTimeSeconds(),
@@ -48,7 +58,10 @@ public static class JwtHelper
     // Devuelve los claims si el token es válido (firma correcta y todavía
     // no expiró), o null si no — el llamador decide qué hacer con un
     // token inválido (el middleware de Program.cs simplemente no marca al
-    // usuario como autenticado).
+    // usuario como autenticado). Un token viejo (emitido antes de agregar
+    // negocioId al payload) no trae esa propiedad y también se trata como
+    // inválido -- fuerza a re-loguear una sola vez tras este cambio, en
+    // vez de dejar pasar un usuario sin Negocio asignado.
     public static UsuarioClaims? Validar(string token, string secreto)
     {
         var partes = token.Split('.');
@@ -76,6 +89,9 @@ public static class JwtHelper
 
         try
         {
+            if (!payload.TryGetProperty("negocioId", out var negocioIdEl) || negocioIdEl.ValueKind == JsonValueKind.Null)
+                return null;
+
             var barberoId = payload.TryGetProperty("barberoId", out var b) && b.ValueKind != JsonValueKind.Null
                 ? b.GetGuid()
                 : (Guid?)null;
@@ -89,6 +105,7 @@ public static class JwtHelper
                 payload.GetProperty("nombre").GetString() ?? "",
                 payload.GetProperty("email").GetString() ?? "",
                 payload.GetProperty("rol").GetString() ?? "",
+                negocioIdEl.GetGuid(),
                 barberoId,
                 clienteId
             );

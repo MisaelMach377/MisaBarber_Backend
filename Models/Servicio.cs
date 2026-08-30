@@ -4,6 +4,12 @@ public class Servicio
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
+    // A qué barbería pertenece este servicio (multi-tenant, ver
+    // Models/Negocio.cs) -- cada barbería arma su propia carta de
+    // servicios y precios, independiente de las demás.
+    public Guid NegocioId { get; set; }
+    public Negocio? Negocio { get; set; }
+
     public string Nombre { get; set; } = string.Empty; // "Corte clásico", "Barba", etc.
     public decimal Precio { get; set; }
 

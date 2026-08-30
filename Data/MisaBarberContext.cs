@@ -22,6 +22,7 @@ public class MisaBarberContext : DbContext
             .HaveColumnType("timestamp without time zone");
     }
 
+    public DbSet<Negocio> Negocios => Set<Negocio>();
     public DbSet<Cliente> Clientes => Set<Cliente>();
     public DbSet<Barbero> Barberos => Set<Barbero>();
     public DbSet<Servicio> Servicios => Set<Servicio>();
@@ -33,12 +34,87 @@ public class MisaBarberContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Slug único entre negocios -- así no puede haber dos barberías
+        // apuntando a la misma URL pública. Postgres trata cada NULL como
+        // distinto en un índice único, así que el negocio principal (Slug
+        // = null, ver Models/Negocio.cs) no choca con nada.
+        modelBuilder.Entity<Negocio>()
+            .HasIndex(n => n.Slug)
+            .IsUnique();
+
+        // Default a nivel de columna (no solo en el modelo en memoria) --
+        // así la migración que agrega ColorPrimario le puede poner este
+        // valor a las filas que ya existen sin que yo tenga que editarla
+        // a mano (mismo espíritu que el backfill manual que sí hizo falta
+        // para NegocioId, pero acá EF ya sabe qué poner solo).
+        modelBuilder.Entity<Negocio>()
+            .Property(n => n.ColorPrimario)
+            .HasDefaultValue("#2563eb");
+
+        // Mismo motivo que ColorPrimario arriba: default a nivel de
+        // columna para que la migración backfillee sola los negocios que
+        // ya existen (todos en "Pro", con el combo básico de módulos para
+        // su rol Barbero) sin que yo tenga que editarla a mano.
+        modelBuilder.Entity<Negocio>()
+            .Property(n => n.Plan)
+            .HasDefaultValue("Pro");
+        modelBuilder.Entity<Negocio>()
+            .Property(n => n.ModulosBarbero)
+            .HasDefaultValue("Citas,Clientes,Historial");
+
         // Precio con precisión fija — sin esto, Npgsql mapea decimal a
         // "numeric" sin precisión definida y tira un warning en cada
         // arranque (y en algunos motores puede truncar mal).
         modelBuilder.Entity<Servicio>()
             .Property(s => s.Precio)
             .HasPrecision(10, 2);
+
+        // Restrict en NegocioId de cada tabla: no tiene sentido borrar un
+        // Negocio que todavía tiene Clientes/Barberos/Servicios/Citas (se
+        // suspende con Estado = "Inactivo" en su lugar, ver
+        // Models/Negocio.cs) -- mismo criterio de "no borrar en cascada
+        // datos que importan" que ya se usaba en las 3 FKs de Cita.
+        modelBuilder.Entity<Cliente>()
+            .HasOne(c => c.Negocio)
+            .WithMany()
+            .HasForeignKey(c => c.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Cliente>().HasIndex(c => c.NegocioId);
+
+        modelBuilder.Entity<Barbero>()
+            .HasOne(b => b.Negocio)
+            .WithMany()
+            .HasForeignKey(b => b.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Barbero>().HasIndex(b => b.NegocioId);
+
+        modelBuilder.Entity<Servicio>()
+            .HasOne(s => s.Negocio)
+            .WithMany()
+            .HasForeignKey(s => s.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Servicio>().HasIndex(s => s.NegocioId);
+
+        modelBuilder.Entity<Cita>()
+            .HasOne(c => c.Negocio)
+            .WithMany()
+            .HasForeignKey(c => c.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Cita>().HasIndex(c => c.NegocioId);
+
+        modelBuilder.Entity<CitaAuditoria>()
+            .HasOne(a => a.Negocio)
+            .WithMany()
+            .HasForeignKey(a => a.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<CitaAuditoria>().HasIndex(a => a.NegocioId);
+
+        modelBuilder.Entity<Usuario>()
+            .HasOne(u => u.Negocio)
+            .WithMany()
+            .HasForeignKey(u => u.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Usuario>().HasIndex(u => u.NegocioId);
 
         // Restrict (no Cascade) en las 3 FKs de Cita: si un Cliente/Barbero/
         // Servicio ya tiene citas, no se puede borrar sin querer y dejar
@@ -94,12 +170,15 @@ public class MisaBarberContext : DbContext
         modelBuilder.Entity<CitaAuditoria>()
             .HasIndex(a => a.FechaHoraEvento);
 
-        // Usuario.Email es el usuario de login: único a nivel de BD como
-        // segunda red de seguridad además de la validación en
-        // AuthController/UsuariosController (evita una condición de
-        // carrera si dos requests de alta llegan casi al mismo tiempo).
+        // Usuario.Email es el usuario de login: único POR Negocio (no
+        // global) -- dos barberías distintas alquilando el sistema pueden
+        // cada una tener un usuario con el mismo correo sin chocar entre
+        // sí. A nivel de BD como segunda red de seguridad además de la
+        // validación en AuthController/UsuariosController (evita una
+        // condición de carrera si dos requests de alta llegan casi al
+        // mismo tiempo).
         modelBuilder.Entity<Usuario>()
-            .HasIndex(u => u.Email)
+            .HasIndex(u => new { u.NegocioId, u.Email })
             .IsUnique();
 
         // SetNull (no Restrict) en Usuario->Barbero: si se elimina la
