@@ -55,6 +55,53 @@ namespace misabarber.Migrations
                     b.ToTable("Barberos");
                 });
 
+            modelBuilder.Entity("misabarber.Models.ChatMensaje", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AutorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AutorNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AutorRol")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClienteNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaEnvio")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("LeidoPorCliente")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("LeidoPorStaff")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Texto")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NegocioId", "ClienteId", "FechaEnvio");
+
+                    b.ToTable("ChatMensajes");
+                });
+
             modelBuilder.Entity("misabarber.Models.Cita", b =>
                 {
                     b.Property<Guid>("Id")
@@ -369,6 +416,17 @@ namespace misabarber.Migrations
                 });
 
             modelBuilder.Entity("misabarber.Models.Barbero", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.ChatMensaje", b =>
                 {
                     b.HasOne("misabarber.Models.Negocio", "Negocio")
                         .WithMany()

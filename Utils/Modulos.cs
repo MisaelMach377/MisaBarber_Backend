@@ -11,7 +11,7 @@ namespace misabarber.Utils;
 public static class Modulos
 {
     public static readonly string[] Todos =
-        { "Citas", "Clientes", "Barberos", "Servicios", "Historial", "Reportes", "Apariencia" };
+        { "Citas", "Clientes", "Barberos", "Servicios", "Historial", "Reportes", "Apariencia", "Chat" };
 
     // Free = lo básico para operar el día a día. Pro suma reportes/
     // historial (análisis) y apariencia (marca propia) -- ver la

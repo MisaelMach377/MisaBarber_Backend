@@ -31,6 +31,7 @@ public class MisaBarberContext : DbContext
     public DbSet<CitaAuditoria> CitasAuditoria => Set<CitaAuditoria>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<SuscripcionPush> SuscripcionesPush => Set<SuscripcionPush>();
+    public DbSet<ChatMensaje> ChatMensajes => Set<ChatMensaje>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -218,5 +219,19 @@ public class MisaBarberContext : DbContext
         modelBuilder.Entity<SuscripcionPush>()
             .HasIndex(s => s.Endpoint)
             .IsUnique();
+
+        // ChatMensaje: mismo criterio que CitaAuditoria -- FK Restrict a
+        // Negocio (no se puede borrar un negocio con conversaciones), pero
+        // sin FK a Usuario para ClienteId/AutorId (los nombres ya viajan
+        // denormalizados en la fila, ver Models/ChatMensaje.cs). El índice
+        // compuesto es el que pisa GetPropio/GetConversacion (todos los
+        // mensajes de una conversación puntual, ordenados por fecha).
+        modelBuilder.Entity<ChatMensaje>()
+            .HasOne(m => m.Negocio)
+            .WithMany()
+            .HasForeignKey(m => m.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ChatMensaje>()
+            .HasIndex(m => new { m.NegocioId, m.ClienteId, m.FechaEnvio });
     }
 }

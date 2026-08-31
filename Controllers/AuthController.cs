@@ -46,6 +46,12 @@ public class AuthController : ControllerBase
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             return permitidosPorPlan.Intersect(propios).ToArray();
         }
+        // Un Cliente no usa el panel interno, así que en general no le
+        // interesa esta lista -- salvo "Chat", que también existe del
+        // lado del Cliente (ver ChatWidget.jsx): así sabe, sin otro
+        // request, si su barbería tiene chat en vivo habilitado (Plan Pro).
+        if (u.Rol == "Cliente")
+            return permitidosPorPlan.Contains("Chat") ? new[] { "Chat" } : Array.Empty<string>();
         return Array.Empty<string>();
     }
 
