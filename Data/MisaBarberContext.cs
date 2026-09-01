@@ -33,6 +33,9 @@ public class MisaBarberContext : DbContext
     public DbSet<SuscripcionPush> SuscripcionesPush => Set<SuscripcionPush>();
     public DbSet<ChatMensaje> ChatMensajes => Set<ChatMensaje>();
     public DbSet<AuditoriaGeneral> AuditoriaGeneral => Set<AuditoriaGeneral>();
+    public DbSet<HorarioNegocio> HorariosNegocio => Set<HorarioNegocio>();
+    public DbSet<HorarioBarbero> HorariosBarbero => Set<HorarioBarbero>();
+    public DbSet<Producto> Productos => Set<Producto>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -249,5 +252,45 @@ public class MisaBarberContext : DbContext
             .HasIndex(a => new { a.NegocioId, a.FechaHoraEvento });
         modelBuilder.Entity<AuditoriaGeneral>()
             .HasIndex(a => a.Entidad);
+
+        // HorarioNegocio/HorarioBarbero: Cascade (a diferencia de las FKs
+        // de arriba) porque acá SÍ corresponde -- son filas de config pura
+        // sin valor histórico propio, dueñas por completo de su Negocio/
+        // Barbero (a diferencia de Cliente/Servicio/Cita, que si se
+        // borraran en cascada se perdería historial real de negocio).
+        // Único (NegocioId, DiaSemana) / (BarberoId, DiaSemana): nunca dos
+        // filas para el mismo día -- ver Utils/Horarios.cs, que siembra
+        // exactamente una por día.
+        modelBuilder.Entity<HorarioNegocio>()
+            .HasOne(h => h.Negocio)
+            .WithMany()
+            .HasForeignKey(h => h.NegocioId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<HorarioNegocio>()
+            .HasIndex(h => new { h.NegocioId, h.DiaSemana })
+            .IsUnique();
+
+        modelBuilder.Entity<HorarioBarbero>()
+            .HasOne(h => h.Barbero)
+            .WithMany()
+            .HasForeignKey(h => h.BarberoId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<HorarioBarbero>()
+            .HasIndex(h => new { h.BarberoId, h.DiaSemana })
+            .IsUnique();
+
+        // Producto: precisión fija en Precio (mismo motivo que Servicio,
+        // ver más arriba) y Restrict en NegocioId -- mismo criterio que
+        // Cliente/Barbero/Servicio: no se puede borrar un negocio que
+        // todavía tiene productos en su catálogo.
+        modelBuilder.Entity<Producto>()
+            .Property(p => p.Precio)
+            .HasPrecision(10, 2);
+        modelBuilder.Entity<Producto>()
+            .HasOne(p => p.Negocio)
+            .WithMany()
+            .HasForeignKey(p => p.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Producto>().HasIndex(p => p.NegocioId);
     }
 }

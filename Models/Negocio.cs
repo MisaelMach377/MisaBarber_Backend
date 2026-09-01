@@ -57,5 +57,30 @@ public class Negocio
     // que el Plan permite.
     public string ModulosBarbero { get; set; } = "Citas,Clientes,Historial";
 
+    // Dirección física del local -- se usa para pintar el mapa embebido
+    // en la pantalla del cliente (MiCuenta.jsx, sección "Encuéntranos
+    // aquí") vía el embed de Google Maps por texto libre
+    // (https://www.google.com/maps?q=<direccion>&output=embed), que NO
+    // necesita API key -- evita meter una key de Google en el proyecto
+    // solo para mostrar un mapa de solo lectura. Nullable a propósito: es
+    // información operativa básica (como el Horario), no un feature de
+    // Plan Pro, así que se edita en MiNegocioController sin pasar por
+    // NegocioConModulo -- pero mientras el Admin no la cargue, no hay
+    // dirección exacta que buscar y la sección del cliente simplemente
+    // no se muestra (ver UsuarioDto.NegocioDireccion).
+    public string? Direccion { get; set; }
+
+    // Coordenadas exactas del local, elegidas por el Admin haciendo click
+    // en el mapa interactivo de Apariencia.jsx (Leaflet + OpenStreetMap,
+    // sin API key -- ver components/Mapa/MapaUbicacion.jsx) en vez de
+    // tener que escribir lat/long a mano. Cuando están cargadas, el mapa
+    // del cliente (MiCuenta.jsx) las usa directo para poner el pin exacto;
+    // si todavía no las cargó pero sí escribió Direccion como texto, cae
+    // al embed de Google Maps por búsqueda de texto (ver el comentario de
+    // Direccion arriba) -- así ningún negocio se queda sin mapa mientras
+    // el Admin no haga el click.
+    public double? Latitud { get; set; }
+    public double? Longitud { get; set; }
+
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 }

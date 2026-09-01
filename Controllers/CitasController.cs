@@ -15,12 +15,10 @@ public class CitasController : ControllerBase
 {
     private static readonly string[] EstadosValidos = { "Pendiente", "Confirmada", "Completada", "Cancelada" };
 
-    // Horario de atención usado para calcular disponibilidad (GetDisponibilidad).
-    // Fijo por ahora (no hay pantalla de configuración de horario todavía);
-    // vive acá, en un solo lugar, para que el día que se haga configurable
-    // sea un cambio de una sola línea.
-    private const int HoraApertura = 9;
-    private const int HoraCierre = 19;
+    // Cada cuántos minutos se ofrece un horario de inicio candidato al
+    // calcular disponibilidad -- esto sí sigue fijo (no hay pedido de
+    // hacerlo configurable), a diferencia de las horas de apertura/cierre
+    // que ahora salen de HorarioNegocio/HorarioBarbero (ver ObtenerVentana).
     private const int PasoDisponibilidadMinutos = 15;
 
     private readonly MisaBarberContext _db;
@@ -255,7 +253,7 @@ public class CitasController : ControllerBase
     // recién se entera del choque al guardar. excluirCitaId es para cuando
     // se está EDITANDO una cita: que no choque contra sí misma.
     [HttpGet("disponibilidad")]
-    public async Task<ActionResult<List<string>>> GetDisponibilidad(
+    public async Task<ActionResult<DisponibilidadDto>> GetDisponibilidad(
         [FromQuery] Guid barberoId,
         [FromQuery] List<Guid> servicioIds,
         [FromQuery] DateTime fecha,
@@ -273,11 +271,17 @@ public class CitasController : ControllerBase
         if (!barberoExiste) return BadRequest("El barbero no existe.");
 
         var dia = fecha.Date;
+
+        var ventana = await ObtenerVentana(barberoId, dia);
+        if (!ventana.Permitido)
+            return Ok(new DisponibilidadDto(new List<string>(), ventana.Motivo));
+
         var siguienteDia = dia.AddDays(1);
 
         // Trae las citas activas de ese barbero ese día UNA sola vez, y
         // evalúa los huecos en memoria — más barato que una query por cada
-        // slot candidato (que sería 1 query cada 15 min entre las 9 y las 19).
+        // slot candidato (que sería 1 query cada 15 min dentro de la
+        // ventana de horario).
         var ocupados = await ConDatos()
             .Where(c => c.BarberoId == barberoId
                 && c.Estado != "Cancelada"
@@ -286,8 +290,8 @@ public class CitasController : ControllerBase
             .ToListAsync();
 
         var duracion = Math.Max(servicios.Sum(s => s.DuracionMinutos), 5);
-        var apertura = dia.AddHours(HoraApertura);
-        var cierre = dia.AddHours(HoraCierre);
+        var apertura = ventana.Apertura!.Value;
+        var cierre = ventana.Cierre!.Value;
         var ahora = DateTime.Now;
 
         var disponibles = new List<string>();
@@ -303,7 +307,65 @@ public class CitasController : ControllerBase
                 disponibles.Add(inicio.ToString("HH:mm"));
         }
 
-        return Ok(disponibles);
+        return Ok(new DisponibilidadDto(disponibles, null));
+    }
+
+    // Calcula la ventana de horario permitida para un barbero en un día
+    // puntual, cruzando HorarioNegocio (¿el negocio atiende ese día?) con
+    // HorarioBarbero (¿ESE barbero trabaja ese día, y tiene un horario
+    // propio más corto?). La usan tanto GetDisponibilidad (para armar la
+    // grilla de horas) como Create/Update (para rechazar del lado del
+    // servidor una cita fuera de horario, aunque alguien le pegue directo
+    // a la API saltándose el front -- mismo criterio de "nunca confiar
+    // solo en la UI" que ya se usa acá para HayConflictoDeHorario).
+    private readonly record struct VentanaHorario(bool Permitido, DateTime? Apertura, DateTime? Cierre, string? Motivo);
+
+    // Rechaza del lado del servidor una cita que caiga fuera de la
+    // ventana de horario del negocio/barbero ese día -- Create/Update la
+    // llaman ANTES de HayConflictoDeHorario, que solo mira choques contra
+    // otras citas, no si el horario en sí es válido.
+    private async Task<ActionResult?> ValidarDentroDeHorario(Guid barberoId, DateTime inicio, DateTime fin)
+    {
+        var ventana = await ObtenerVentana(barberoId, inicio.Date);
+        if (!ventana.Permitido)
+        {
+            return BadRequest(ventana.Motivo == "NegocioCerrado"
+                ? "El negocio no atiende ese día."
+                : "Ese barbero no trabaja ese día.");
+        }
+
+        if (inicio < ventana.Apertura!.Value || fin > ventana.Cierre!.Value)
+            return BadRequest("Esa hora está fuera del horario de atención de ese día.");
+
+        return null;
+    }
+
+    private async Task<VentanaHorario> ObtenerVentana(Guid barberoId, DateTime dia)
+    {
+        var diaSemana = (int)dia.DayOfWeek; // 0=Domingo..6=Sábado, misma convención que HorarioNegocio/HorarioBarbero.DiaSemana
+
+        var horarioNegocio = await _db.HorariosNegocio.FirstOrDefaultAsync(h => h.NegocioId == NegocioId && h.DiaSemana == diaSemana);
+        if (horarioNegocio is null || !horarioNegocio.Abierto)
+            return new VentanaHorario(false, null, null, "NegocioCerrado");
+
+        var horarioBarbero = await _db.HorariosBarbero.FirstOrDefaultAsync(h => h.BarberoId == barberoId && h.DiaSemana == diaSemana);
+        if (horarioBarbero is not null && !horarioBarbero.Trabaja)
+            return new VentanaHorario(false, null, null, "BarberoNoTrabaja");
+
+        var aperturaNegocio = dia + horarioNegocio.HoraInicio;
+        var cierreNegocio = dia + horarioNegocio.HoraFin;
+
+        // Horario propio del barbero (si tiene) SIEMPRE recortado dentro
+        // del horario del negocio -- nunca puede "abrir" más de lo que el
+        // negocio permite, aunque el Admin le haya puesto un horario más
+        // amplio por error.
+        var apertura = horarioBarbero?.HoraInicio is TimeSpan hi && dia + hi > aperturaNegocio ? dia + hi : aperturaNegocio;
+        var cierre = horarioBarbero?.HoraFin is TimeSpan hf && dia + hf < cierreNegocio ? dia + hf : cierreNegocio;
+
+        if (cierre <= apertura)
+            return new VentanaHorario(false, null, null, "BarberoNoTrabaja");
+
+        return new VentanaHorario(true, apertura, cierre, null);
     }
 
     [HttpGet("{id}")]
@@ -378,6 +440,9 @@ public class CitasController : ControllerBase
         var inicio = dto.FechaHora;
         var fin = inicio.AddMinutes(servicios!.Sum(s => s.DuracionMinutos));
 
+        var errorHorario = await ValidarDentroDeHorario(dto.BarberoId, inicio, fin);
+        if (errorHorario is not null) return errorHorario;
+
         if (await HayConflictoDeHorario(dto.BarberoId, inicio, fin, excluirId: null))
             return BadRequest($"{barbero.Nombre} ya tiene otra cita agendada en ese horario. Elige otra hora o otro barbero.");
 
@@ -423,6 +488,9 @@ public class CitasController : ControllerBase
 
         var inicio = dto.FechaHora;
         var fin = inicio.AddMinutes(servicios!.Sum(s => s.DuracionMinutos));
+
+        var errorHorario = await ValidarDentroDeHorario(dto.BarberoId, inicio, fin);
+        if (errorHorario is not null) return errorHorario;
 
         if (await HayConflictoDeHorario(dto.BarberoId, inicio, fin, excluirId: id))
             return BadRequest($"{barbero.Nombre} ya tiene otra cita agendada en ese horario. Elige otra hora o otro barbero.");

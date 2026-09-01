@@ -76,6 +76,7 @@ public class NegociosController : ControllerBase
             Plan = "Free",
         };
         _db.Negocios.Add(negocio);
+        _db.HorariosNegocio.AddRange(Horarios.SembrarNegocio(negocio.Id));
 
         var admin = new Usuario
         {

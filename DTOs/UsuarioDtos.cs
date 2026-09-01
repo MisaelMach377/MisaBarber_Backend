@@ -24,7 +24,24 @@ public record UsuarioDto(
     // AuthController.ModulosPara). Viaja resuelta para que Layout.jsx no
     // tenga que reimplementar esa lógica del lado del cliente.
     string NegocioPlan,
-    string[] ModulosVisibles
+    string[] ModulosVisibles,
+    // Horario semanal del negocio (7 filas, ver DTOs/HorarioDtos.cs) --
+    // viaja acá para que la pantalla del cliente (MiCuenta.jsx) pueda
+    // mostrar "Atendemos de Lunes a Domingo, 9:00-19:00" sin otro
+    // request. Barbero/Admin también lo reciben aunque no lo usen todavía
+    // -- es información pública del negocio, no hace falta filtrarla por rol.
+    List<HorarioNegocioDiaDto> NegocioHorario,
+    // Dirección del local (puede ser null si el Admin todavía no la
+    // cargó desde Apariencia.jsx) -- viaja acá por la misma razón que
+    // NegocioHorario un poco más arriba: para que MiCuenta.jsx pinte el
+    // mapa embebido de "Encuéntranos aquí" sin un request aparte.
+    string? NegocioDireccion,
+    // Coordenadas exactas (click en el mapa, ver Models/Negocio.cs) --
+    // cuando están presentes, MiCuenta.jsx las prefiere sobre
+    // NegocioDireccion para pintar el pin, porque son precisas y no
+    // dependen de que Google adivine bien una búsqueda de texto.
+    double? NegocioLatitud,
+    double? NegocioLongitud
 );
 
 public record UsuarioCreateDto(string Nombre, string Email, string Password, string Rol, Guid? BarberoId, string? FotoUrl);

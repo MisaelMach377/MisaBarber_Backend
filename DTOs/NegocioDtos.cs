@@ -30,6 +30,14 @@ public record NegocioPublicoDto(string Nombre, string? LogoUrl, string ColorPrim
 public record AparienciaDto(string NombreNegocio, string? LogoUrl, string ColorPrimario, string? Slug, bool EsPrincipal);
 public record ActualizarAparienciaDto(string? LogoUrl, string ColorPrimario);
 
+// Ubicación del local -- separado de Apariencia a propósito (mismo
+// criterio que el Horario en HorarioDtos.cs): no es un feature de Plan
+// Pro, es info operativa básica, así que MiNegocioController la expone
+// sin pasar por NegocioConModulo aunque viva en la misma pantalla
+// (Apariencia.jsx) del lado del Admin.
+public record UbicacionDto(string? Direccion, double? Latitud, double? Longitud);
+public record ActualizarUbicacionDto(string? Direccion, double? Latitud, double? Longitud);
+
 // Alta de una barbería nueva (alquiler) + su primer usuario Admin, en un
 // solo paso -- lo usa NegociosController, exclusivo del SuperAdmin (yo).
 // Slug es obligatorio acá (a diferencia de LoginDto/RegistroClienteDto):

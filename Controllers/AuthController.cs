@@ -23,10 +23,25 @@ public class AuthController : ControllerBase
     private string Secreto => _config["Jwt:Secret"]
         ?? throw new InvalidOperationException("Falta configurar Jwt:Secret en appsettings.");
 
-    private UsuarioDto ToDto(Usuario u, Negocio negocio) => new(
-        u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
-        negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Plan, ModulosPara(u, negocio)
-    );
+    // Async (no un simple map en memoria) porque el horario del negocio
+    // viaja acá también -- mismo criterio que LogoUrl/ColorPrimario un
+    // poco más arriba: que la pantalla "Buenas tardes" del cliente
+    // (MiCuenta.jsx) pinte el horario apenas carga /auth/me, sin pedirle
+    // nada aparte al backend.
+    private async Task<UsuarioDto> ToDto(Usuario u, Negocio negocio)
+    {
+        var horario = await _db.HorariosNegocio
+            .Where(h => h.NegocioId == negocio.Id)
+            .OrderBy(h => h.DiaSemana)
+            .Select(h => new HorarioNegocioDiaDto(h.DiaSemana, h.Abierto, Horarios.FormatHora(h.HoraInicio), Horarios.FormatHora(h.HoraFin)))
+            .ToListAsync();
+
+        return new(
+            u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
+            negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Plan, ModulosPara(u, negocio), horario, negocio.Direccion,
+            negocio.Latitud, negocio.Longitud
+        );
+    }
 
     // Admin/SuperAdmin ven todo lo que el Plan del negocio permite -- acá
     // no hay restricción de rol, esa es la respuesta a "qué compró la
@@ -93,7 +108,7 @@ public class AuthController : ControllerBase
 
         var token = JwtHelper.Generar(ToClaims(usuario), Secreto);
 
-        return Ok(new LoginResponseDto(token, ToDto(usuario, negocio)));
+        return Ok(new LoginResponseDto(token, await ToDto(usuario, negocio)));
     }
 
     // Alta pública de una cuenta Cliente ("Sign Up" en el panel deslizante
@@ -150,7 +165,7 @@ public class AuthController : ControllerBase
 
         var token = JwtHelper.Generar(ToClaims(usuario), Secreto);
 
-        return Ok(new LoginResponseDto(token, ToDto(usuario, negocio)));
+        return Ok(new LoginResponseDto(token, await ToDto(usuario, negocio)));
     }
 
     // El front la llama al montar la app para rehidratar la sesión desde
@@ -164,7 +179,7 @@ public class AuthController : ControllerBase
         var usuario = await _db.Usuarios.Include(u => u.Barbero).Include(u => u.Negocio)
             .FirstOrDefaultAsync(u => u.Id == actual.Id);
         if (usuario is null || usuario.Estado != "Activo") return Unauthorized();
-        return Ok(ToDto(usuario, usuario.Negocio!));
+        return Ok(await ToDto(usuario, usuario.Negocio!));
     }
 
     // Pública (sin sesión) -- la llama la pantalla de login/registro ANTES

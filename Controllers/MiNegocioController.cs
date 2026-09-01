@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using misabarber.Data;
 using misabarber.DTOs;
 using misabarber.Models;
@@ -100,5 +101,99 @@ public class MiNegocioController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(new RolesDto(elegidos, disponibles));
+    }
+
+    // Horario semanal de atención del negocio -- disponible para
+    // cualquier Plan (a diferencia de Apariencia/Roles de acá arriba, ver
+    // la conversación con Misael: manejar los horarios de tu propio
+    // negocio/equipo no es un feature premium, es operar el día a día),
+    // por eso NO pasa por NegocioConModulo. Siempre devuelve las 7 filas
+    // -- las siembra Utils/Horarios.cs al crear el Negocio (o el backfill
+    // de la migración para los que ya existían), así que si un día no
+    // aparece es un bug de seeding, no un caso a contemplar acá.
+    [HttpGet("horario")]
+    public async Task<ActionResult<List<HorarioNegocioDiaDto>>> GetHorario()
+    {
+        var dias = await _db.HorariosNegocio
+            .Where(h => h.NegocioId == NegocioId)
+            .OrderBy(h => h.DiaSemana)
+            .ToListAsync();
+
+        return Ok(dias.Select(ToDiaDto));
+    }
+
+    [HttpPut("horario")]
+    public async Task<ActionResult<List<HorarioNegocioDiaDto>>> ActualizarHorario(ActualizarHorarioNegocioDto dto)
+    {
+        if (dto.Dias is null || dto.Dias.Count != 7 || dto.Dias.Select(d => d.DiaSemana).Distinct().Count() != 7)
+            return BadRequest("Debes enviar los 7 días de la semana, uno de cada uno.");
+
+        var dias = await _db.HorariosNegocio
+            .Where(h => h.NegocioId == NegocioId)
+            .ToDictionaryAsync(h => h.DiaSemana);
+
+        foreach (var d in dto.Dias)
+        {
+            if (d.DiaSemana < 0 || d.DiaSemana > 6)
+                return BadRequest("Día de la semana inválido.");
+            if (!dias.TryGetValue(d.DiaSemana, out var fila))
+                return NotFound($"No se encontró el horario del negocio para el día {d.DiaSemana} -- contacta soporte.");
+
+            if (d.Abierto)
+            {
+                if (!Horarios.TryParseHora(d.HoraInicio, out var inicio) || !Horarios.TryParseHora(d.HoraFin, out var fin) || fin <= inicio)
+                    return BadRequest("La hora de inicio debe ser antes que la hora de fin.");
+                fila.HoraInicio = inicio;
+                fila.HoraFin = fin;
+            }
+
+            fila.Abierto = d.Abierto;
+        }
+
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Negocio", NegocioId, "Horario del negocio", "Horario de atención actualizado");
+        await _db.SaveChangesAsync();
+
+        var actualizado = await _db.HorariosNegocio.Where(h => h.NegocioId == NegocioId).OrderBy(h => h.DiaSemana).ToListAsync();
+        return Ok(actualizado.Select(ToDiaDto));
+    }
+
+    private static HorarioNegocioDiaDto ToDiaDto(HorarioNegocio h) =>
+        new(h.DiaSemana, h.Abierto, Horarios.FormatHora(h.HoraInicio), Horarios.FormatHora(h.HoraFin));
+
+    // Dirección del local -- mismo criterio que Horario arriba: info
+    // operativa disponible en cualquier Plan, no pasa por
+    // NegocioConModulo aunque se edite desde la misma pantalla
+    // (Apariencia.jsx) que Logo/Color, que sí son Pro.
+    [HttpGet("ubicacion")]
+    public async Task<ActionResult<UbicacionDto>> GetUbicacion()
+    {
+        var negocio = await _db.Negocios.FindAsync(NegocioId);
+        if (negocio is null) return NotFound();
+        return Ok(new UbicacionDto(negocio.Direccion, negocio.Latitud, negocio.Longitud));
+    }
+
+    [HttpPut("ubicacion")]
+    public async Task<ActionResult<UbicacionDto>> ActualizarUbicacion(ActualizarUbicacionDto dto)
+    {
+        // Las dos vienen juntas o ninguna -- un solo click en el mapa las
+        // fija a la vez (ver MapaUbicacion.jsx), así que si llega una sin
+        // la otra es un bug del front, no un caso a tolerar en silencio.
+        if ((dto.Latitud is null) != (dto.Longitud is null))
+            return BadRequest("Latitud y longitud deben venir juntas.");
+        if (dto.Latitud is < -90 or > 90)
+            return BadRequest("Latitud fuera de rango.");
+        if (dto.Longitud is < -180 or > 180)
+            return BadRequest("Longitud fuera de rango.");
+
+        var negocio = await _db.Negocios.FindAsync(NegocioId);
+        if (negocio is null) return NotFound();
+
+        negocio.Direccion = string.IsNullOrWhiteSpace(dto.Direccion) ? null : dto.Direccion.Trim();
+        negocio.Latitud = dto.Latitud;
+        negocio.Longitud = dto.Longitud;
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Negocio", negocio.Id, negocio.Nombre, "Ubicación actualizada");
+        await _db.SaveChangesAsync();
+
+        return Ok(new UbicacionDto(negocio.Direccion, negocio.Latitud, negocio.Longitud));
     }
 }

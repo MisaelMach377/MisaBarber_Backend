@@ -33,7 +33,7 @@ public class UsuariosController : ControllerBase
 
     private UsuarioDto ToDto(Usuario u) => new(
         u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
-        "", null, "#2563eb", "Pro", Array.Empty<string>()
+        "", null, "#2563eb", "Pro", Array.Empty<string>(), new List<HorarioNegocioDiaDto>(), null, null, null
     );
 
     private IQueryable<Usuario> ConBarbero() => _db.Usuarios.Include(u => u.Barbero).Where(u => u.NegocioId == NegocioId);

@@ -11,15 +11,17 @@ namespace misabarber.Utils;
 public static class Modulos
 {
     public static readonly string[] Todos =
-        { "Citas", "Clientes", "Barberos", "Servicios", "Historial", "Reportes", "Apariencia", "Chat" };
+        { "Citas", "Clientes", "Barberos", "Servicios", "Productos", "Historial", "Reportes", "Apariencia", "Chat" };
 
     // Free = lo básico para operar el día a día. Pro suma reportes/
     // historial (análisis) y apariencia (marca propia) -- ver la
     // conversación con Misael: son features, no el manejo de su propio
-    // equipo (eso -- Usuarios, Roles -- no se paywallea).
+    // equipo (eso -- Usuarios, Roles -- no se paywallea). Productos entra
+    // en Free por el mismo motivo que Servicios: vender cera/pomada en el
+    // mostrador es operar el día a día, no un feature de análisis/marca.
     public static readonly Dictionary<string, string[]> PorPlan = new()
     {
-        ["Free"] = new[] { "Citas", "Clientes", "Barberos", "Servicios" },
+        ["Free"] = new[] { "Citas", "Clientes", "Barberos", "Servicios", "Productos" },
         ["Pro"] = Todos,
     };
 

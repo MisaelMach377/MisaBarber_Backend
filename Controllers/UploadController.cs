@@ -5,7 +5,7 @@ using misabarber.Utils;
 
 namespace misabarber.Controllers;
 
-// Sube fotos de Clientes/Barberos/Usuarios/Negocios a Cloudinary (antes
+// Sube fotos de Clientes/Barberos/Usuarios/Negocios/Productos a Cloudinary (antes
 // se guardaban en wwwroot/uploads/{carpeta}/, ver el comentario en
 // Program.cs sobre por qué se cambió) y devuelve la URL absoluta para
 // guardar en FotoUrl/LogoUrl. Sigue exigiendo sesión (RequiereAuth) --
@@ -23,11 +23,11 @@ public class UploadController : ControllerBase
     private static readonly string[] ExtensionesPermitidas = { ".jpg", ".jpeg", ".png", ".webp" };
     private const long TamanoMaximoBytes = 5 * 1024 * 1024; // 5 MB
 
-    // Todo lo que sube este endpoint es una foto de perfil/logo (Cliente,
-    // Barbero, Usuario o Negocio) -- se ve en círculos/avatares chicos de
-    // la UI (ver FotoPicker.jsx), así que un solo ancho máximo alcanza
-    // para las 4 carpetas, a diferencia de MisaDesk que sí distingue
-    // avatar vs. documento.
+    // Todo lo que sube este endpoint es una foto de perfil/logo/producto
+    // (Cliente, Barbero, Usuario, Negocio o Producto) -- se ve en
+    // círculos/avatares chicos de la UI (ver FotoPicker.jsx), así que un
+    // solo ancho máximo alcanza para todas las carpetas, a diferencia de
+    // MisaDesk que sí distingue avatar vs. documento.
     private const int AnchoMaximo = 600;
 
     public UploadController(Cloudinary? cloudinary)
