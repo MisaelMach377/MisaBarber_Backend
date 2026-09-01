@@ -32,6 +32,7 @@ public class MisaBarberContext : DbContext
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<SuscripcionPush> SuscripcionesPush => Set<SuscripcionPush>();
     public DbSet<ChatMensaje> ChatMensajes => Set<ChatMensaje>();
+    public DbSet<AuditoriaGeneral> AuditoriaGeneral => Set<AuditoriaGeneral>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -233,5 +234,20 @@ public class MisaBarberContext : DbContext
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ChatMensaje>()
             .HasIndex(m => new { m.NegocioId, m.ClienteId, m.FechaEnvio });
+
+        // AuditoriaGeneral: mismo criterio que CitaAuditoria -- FK
+        // Restrict a Negocio, sin FK a Usuario para AutorId (el nombre ya
+        // viaja denormalizado, ver Models/AuditoriaGeneral.cs), e índices
+        // para que filtrar por Negocio/fecha/tipo de entidad no haga table
+        // scan cuando el historial crezca.
+        modelBuilder.Entity<AuditoriaGeneral>()
+            .HasOne(a => a.Negocio)
+            .WithMany()
+            .HasForeignKey(a => a.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<AuditoriaGeneral>()
+            .HasIndex(a => new { a.NegocioId, a.FechaHoraEvento });
+        modelBuilder.Entity<AuditoriaGeneral>()
+            .HasIndex(a => a.Entidad);
     }
 }

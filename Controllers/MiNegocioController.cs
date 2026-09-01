@@ -57,6 +57,7 @@ public class MiNegocioController : ControllerBase
 
         negocio.LogoUrl = string.IsNullOrWhiteSpace(dto.LogoUrl) ? null : dto.LogoUrl;
         negocio.ColorPrimario = dto.ColorPrimario;
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Negocio", negocio.Id, negocio.Nombre, "Apariencia actualizada");
         await _db.SaveChangesAsync();
 
         return Ok(new AparienciaDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario));
@@ -95,6 +96,7 @@ public class MiNegocioController : ControllerBase
             .ToArray();
 
         negocio.ModulosBarbero = string.Join(",", elegidos);
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Negocio", negocio.Id, negocio.Nombre, "Roles del equipo actualizados", elegidos.Length > 0 ? string.Join(", ", elegidos) : "Sin módulos para Barbero");
         await _db.SaveChangesAsync();
 
         return Ok(new RolesDto(elegidos, disponibles));

@@ -59,6 +59,7 @@ public class ClientesController : ControllerBase
         };
 
         _db.Clientes.Add(cliente);
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Cliente", cliente.Id, cliente.Nombre, "Creado");
         await _db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = cliente.Id }, ToDto(cliente));
@@ -82,6 +83,7 @@ public class ClientesController : ControllerBase
         if (dto.FotoUrl is not null)
             c.FotoUrl = dto.FotoUrl;
 
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Cliente", c.Id, c.Nombre, "Editado");
         await _db.SaveChangesAsync();
         return Ok(ToDto(c));
     }
@@ -95,7 +97,9 @@ public class ClientesController : ControllerBase
         var c = await _db.Clientes.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (c is null) return NotFound();
 
+        var estadoAnterior = c.Estado;
         c.Estado = dto.Estado;
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Cliente", c.Id, c.Nombre, $"Estado: {estadoAnterior} -> {dto.Estado}");
         await _db.SaveChangesAsync();
         return Ok(ToDto(c));
     }
@@ -112,6 +116,7 @@ public class ClientesController : ControllerBase
         if (tieneHistorial)
             return BadRequest("No puedes eliminar a este cliente porque ya tiene citas registradas. Puedes marcarlo como Inactivo en su lugar.");
 
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Cliente", c.Id, c.Nombre, "Eliminado");
         _db.Clientes.Remove(c);
         await _db.SaveChangesAsync();
         return NoContent();

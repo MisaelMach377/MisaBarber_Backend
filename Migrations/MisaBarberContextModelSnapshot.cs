@@ -22,11 +22,60 @@ namespace misabarber.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("misabarber.Models.AuditoriaGeneral", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Accion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("AutorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AutorNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Detalle")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Entidad")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("EntidadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EntidadNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaHoraEvento")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Entidad");
+
+                    b.HasIndex("NegocioId", "FechaHoraEvento");
+
+                    b.ToTable("AuditoriaGeneral");
+                });
+
             modelBuilder.Entity("misabarber.Models.Barbero", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
 
                     b.Property<string>("Estado")
                         .IsRequired()
@@ -413,6 +462,17 @@ namespace misabarber.Migrations
                         .IsUnique();
 
                     b.ToTable("Usuarios");
+                });
+
+            modelBuilder.Entity("misabarber.Models.AuditoriaGeneral", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
                 });
 
             modelBuilder.Entity("misabarber.Models.Barbero", b =>

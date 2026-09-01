@@ -23,7 +23,7 @@ public class BarberosController : ControllerBase
 
     private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
 
-    private static BarberoDto ToDto(Barbero b) => new(b.Id, b.Nombre, b.Telefono, b.FotoUrl, b.Estado, b.FechaCreacion);
+    private static BarberoDto ToDto(Barbero b) => new(b.Id, b.Nombre, b.Telefono, b.Email, b.FotoUrl, b.Estado, b.FechaCreacion);
 
     [HttpGet]
     public async Task<ActionResult<List<BarberoDto>>> GetAll()
@@ -54,10 +54,12 @@ public class BarberosController : ControllerBase
             NegocioId = NegocioId,
             Nombre = dto.Nombre,
             Telefono = dto.Telefono,
+            Email = dto.Email,
             FotoUrl = dto.FotoUrl,
         };
 
         _db.Barberos.Add(barbero);
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Barbero", barbero.Id, barbero.Nombre, "Creado");
         await _db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(GetById), new { id = barbero.Id }, ToDto(barbero));
@@ -77,9 +79,11 @@ public class BarberosController : ControllerBase
 
         b.Nombre = dto.Nombre;
         b.Telefono = dto.Telefono;
+        b.Email = dto.Email;
         if (dto.FotoUrl is not null)
             b.FotoUrl = dto.FotoUrl;
 
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Barbero", b.Id, b.Nombre, "Editado");
         await _db.SaveChangesAsync();
         return Ok(ToDto(b));
     }
@@ -93,7 +97,9 @@ public class BarberosController : ControllerBase
         var b = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (b is null) return NotFound();
 
+        var estadoAnterior = b.Estado;
         b.Estado = dto.Estado;
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Barbero", b.Id, b.Nombre, $"Estado: {estadoAnterior} -> {dto.Estado}");
         await _db.SaveChangesAsync();
         return Ok(ToDto(b));
     }
@@ -108,6 +114,7 @@ public class BarberosController : ControllerBase
         if (tieneHistorial)
             return BadRequest("No puedes eliminar a este barbero porque ya tiene citas registradas. Puedes marcarlo como Inactivo en su lugar.");
 
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Barbero", b.Id, b.Nombre, "Eliminado");
         _db.Barberos.Remove(b);
         await _db.SaveChangesAsync();
         return NoContent();

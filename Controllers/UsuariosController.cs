@@ -97,6 +97,7 @@ public class UsuariosController : ControllerBase
         };
 
         _db.Usuarios.Add(usuario);
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Usuario", usuario.Id, usuario.Nombre, "Creado", $"Rol: {usuario.Rol}");
         await _db.SaveChangesAsync();
 
         var creado = await ConBarbero().FirstAsync(u => u.Id == usuario.Id);
@@ -139,6 +140,7 @@ public class UsuariosController : ControllerBase
         if (dto.FotoUrl is not null)
             usuario.FotoUrl = dto.FotoUrl;
 
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Usuario", usuario.Id, usuario.Nombre, "Editado", $"Rol: {usuario.Rol}");
         await _db.SaveChangesAsync();
 
         var actualizado = await ConBarbero().FirstAsync(u => u.Id == id);
@@ -159,7 +161,9 @@ public class UsuariosController : ControllerBase
         if (usuario.Id == HttpContext.UsuarioActual()!.Id && dto.Estado == "Inactivo")
             return BadRequest("No puedes desactivar tu propia cuenta.");
 
+        var estadoAnterior = usuario.Estado;
         usuario.Estado = dto.Estado;
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Usuario", usuario.Id, usuario.Nombre, $"Estado: {estadoAnterior} -> {dto.Estado}");
         await _db.SaveChangesAsync();
         return Ok(ToDto(usuario));
     }
@@ -177,6 +181,7 @@ public class UsuariosController : ControllerBase
         if (usuario is null) return NotFound();
 
         usuario.PasswordHash = PasswordHasher.Hash(dto.ContrasenaNueva);
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Usuario", usuario.Id, usuario.Nombre, "Contraseña reseteada");
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -190,6 +195,7 @@ public class UsuariosController : ControllerBase
         if (usuario.Id == HttpContext.UsuarioActual()!.Id)
             return BadRequest("No puedes eliminar tu propia cuenta.");
 
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Usuario", usuario.Id, usuario.Nombre, "Eliminado");
         _db.Usuarios.Remove(usuario);
         await _db.SaveChangesAsync();
         return NoContent();
