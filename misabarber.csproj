@@ -19,6 +19,8 @@
     </PackageReference>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
     <PackageReference Include="WebPush" Version="1.0.13" />
+    <!-- Misma versión probada que ya usa MisaDesk_Backend para esto. -->
+    <PackageReference Include="CloudinaryDotNet" Version="1.29.2" />
   </ItemGroup>
 
 </Project>

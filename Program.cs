@@ -1,3 +1,4 @@
+using CloudinaryDotNet;
 using Microsoft.EntityFrameworkCore;
 using misabarber.Data;
 using misabarber.Models;
@@ -31,6 +32,26 @@ builder.Services.AddSwaggerGen();
 
 // ---- Notificaciones push (Web Push + VAPID, ver Services/PushNotificationService.cs) ----
 builder.Services.AddScoped<PushNotificationService>();
+
+// ---- Cloudinary (fotos de Clientes/Barberos/Usuarios/Negocios, ver
+// UploadController) ----
+// Antes las fotos se guardaban en wwwroot/uploads -- en Railway el
+// filesystem del contenedor es efímero y se pierde en cada redeploy o
+// reinicio. Ahora se suben a Cloudinary, que es permanente. Las 3 claves
+// van por configuración (User Secrets en local, variables de entorno
+// Cloudinary__CloudName / Cloudinary__ApiKey / Cloudinary__ApiSecret en
+// Railway -- ver railway.secrets.json), nunca hardcodeadas acá. Si
+// todavía no están configuradas, queda en null y UploadController
+// devuelve un error claro en vez de tumbar el arranque de toda la app.
+// Mismo patrón exacto que ya usa MisaDesk_Backend para esto.
+var cloudinarySection = builder.Configuration.GetSection("Cloudinary");
+var cloudinaryCloudName = cloudinarySection["CloudName"];
+var cloudinaryApiKey = cloudinarySection["ApiKey"];
+var cloudinaryApiSecret = cloudinarySection["ApiSecret"];
+builder.Services.AddSingleton<Cloudinary?>(_ =>
+    string.IsNullOrWhiteSpace(cloudinaryCloudName) || string.IsNullOrWhiteSpace(cloudinaryApiKey) || string.IsNullOrWhiteSpace(cloudinaryApiSecret)
+        ? null
+        : new Cloudinary(new Account(cloudinaryCloudName, cloudinaryApiKey, cloudinaryApiSecret)));
 
 // ---- CORS (para el front en Vite) ----
 // No hace falta AllowCredentials: la sesión viaja en el header
@@ -67,8 +88,9 @@ if (!esRailway)
     app.UseHttpsRedirection();
 }
 
-// Sirve wwwroot/uploads/... (fotos de clientes/barberos que sube
-// UploadController) como archivos estáticos públicos.
+// wwwroot/uploads ya no recibe fotos nuevas (ahora van a Cloudinary, ver
+// UploadController), pero UseStaticFiles queda igual por si hay fotos
+// viejas subidas antes de este cambio que todavía cuelgan de ahí.
 app.UseStaticFiles();
 
 app.UseCors("Frontend");
