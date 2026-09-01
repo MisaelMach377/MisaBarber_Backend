@@ -11,6 +11,13 @@ public class Servicio
     public Negocio? Negocio { get; set; }
 
     public string Nombre { get; set; } = string.Empty; // "Corte clásico", "Barba", etc.
+
+    // Qué incluye el servicio -- el Cliente la ve al tocar el ícono de
+    // información al lado de cada servicio en MiCuenta.jsx (paso 1 de la
+    // reserva), no es obligatoria: muchas barberías van a dejar el nombre
+    // solo ("Corte clásico") sin necesitar explicar más.
+    public string? Descripcion { get; set; }
+
     public decimal Precio { get; set; }
 
     // Duración estimada del servicio — CitasController la usa para calcular

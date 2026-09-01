@@ -219,7 +219,14 @@ public class CitasController : ControllerBase
         [FromQuery] DateTime? hasta,
         [FromQuery] Guid? citaId)
     {
-        if (HttpContext.UsuarioActual()!.Rol == "Cliente") return Forbid();
+        // Antes solo bloqueaba "Cliente", así que un Barbero podía pegarle
+        // directo a este endpoint y ver la auditoría de TODAS las citas del
+        // negocio (no solo las suyas) -- a diferencia de GetHistorial de
+        // arriba, acá no hay un "barberoIdEfectivo" que lo filtre, así que
+        // la única opción correcta es no dejarlo entrar. Mismo criterio que
+        // ya usa AuditoriaController (Admin/SuperAdmin únicamente).
+        var rolActual = HttpContext.UsuarioActual()!.Rol;
+        if (rolActual != "Admin" && rolActual != "SuperAdmin") return Forbid();
         if (!await PlanPermiteHistorial()) return Forbid();
 
         var query = _db.CitasAuditoria.Where(a => a.NegocioId == NegocioId);

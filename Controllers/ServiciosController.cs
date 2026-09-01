@@ -23,7 +23,7 @@ public class ServiciosController : ControllerBase
 
     private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
 
-    private static ServicioDto ToDto(Servicio s) => new(s.Id, s.Nombre, s.Precio, s.DuracionMinutos, s.Estado, s.FechaCreacion);
+    private static ServicioDto ToDto(Servicio s) => new(s.Id, s.Nombre, s.Descripcion, s.Precio, s.DuracionMinutos, s.Estado, s.FechaCreacion);
 
     [HttpGet]
     public async Task<ActionResult<List<ServicioDto>>> GetAll()
@@ -54,6 +54,7 @@ public class ServiciosController : ControllerBase
         {
             NegocioId = NegocioId,
             Nombre = dto.Nombre,
+            Descripcion = string.IsNullOrWhiteSpace(dto.Descripcion) ? null : dto.Descripcion.Trim(),
             Precio = dto.Precio,
             DuracionMinutos = dto.DuracionMinutos,
         };
@@ -78,6 +79,7 @@ public class ServiciosController : ControllerBase
             return BadRequest("La duración tiene que ser mayor a 0.");
 
         s.Nombre = dto.Nombre;
+        s.Descripcion = string.IsNullOrWhiteSpace(dto.Descripcion) ? null : dto.Descripcion.Trim();
         s.Precio = dto.Precio;
         s.DuracionMinutos = dto.DuracionMinutos;
 

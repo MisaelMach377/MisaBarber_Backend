@@ -23,7 +23,11 @@ public record NegocioPublicoDto(string Nombre, string? LogoUrl, string ColorPrim
 // Apariencia editable de la barbería -- la usan MiNegocioController (el
 // propio Admin/SuperAdmin editando SU negocio) y NegociosController (el
 // SuperAdmin editando cualquiera desde la lista).
-public record AparienciaDto(string NombreNegocio, string? LogoUrl, string ColorPrimario);
+// Slug/EsPrincipal viajan de SOLO LECTURA acá -- el Admin no los edita
+// desde Apariencia (eso sigue siendo del SuperAdmin en NegociosController),
+// pero Apariencia.jsx los necesita para armar el link/QR de login y
+// registro de SU barbería (ver el comentario de Negocio.Slug).
+public record AparienciaDto(string NombreNegocio, string? LogoUrl, string ColorPrimario, string? Slug, bool EsPrincipal);
 public record ActualizarAparienciaDto(string? LogoUrl, string ColorPrimario);
 
 // Alta de una barbería nueva (alquiler) + su primer usuario Admin, en un

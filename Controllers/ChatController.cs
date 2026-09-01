@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using misabarber.Data;
 using misabarber.DTOs;
 using misabarber.Models;
+using misabarber.Services;
 using misabarber.Utils;
 
 namespace misabarber.Controllers;
@@ -24,10 +25,12 @@ public class ChatController : ControllerBase
     private const int TextoMaxLength = 2000;
 
     private readonly MisaBarberContext _db;
+    private readonly PushNotificationService _notificaciones;
 
-    public ChatController(MisaBarberContext db)
+    public ChatController(MisaBarberContext db, PushNotificationService notificaciones)
     {
         _db = db;
+        _notificaciones = notificaciones;
     }
 
     private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
@@ -104,6 +107,7 @@ public class ChatController : ControllerBase
         };
         _db.ChatMensajes.Add(mensaje);
         await _db.SaveChangesAsync();
+        await _notificaciones.NotificarMensajeCliente(mensaje);
 
         return Ok(ToDto(mensaje));
     }
@@ -230,6 +234,7 @@ public class ChatController : ControllerBase
         };
         _db.ChatMensajes.Add(mensaje);
         await _db.SaveChangesAsync();
+        await _notificaciones.NotificarMensajeStaff(mensaje);
 
         return Ok(ToDto(mensaje));
     }

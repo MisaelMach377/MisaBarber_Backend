@@ -347,6 +347,9 @@ namespace misabarber.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Descripcion")
+                        .HasColumnType("text");
+
                     b.Property<int>("DuracionMinutos")
                         .HasColumnType("integer");
 

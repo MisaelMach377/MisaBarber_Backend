@@ -43,7 +43,7 @@ public class MiNegocioController : ControllerBase
     {
         var negocio = await NegocioConModulo("Apariencia");
         if (negocio is null) return NotFound();
-        return Ok(new AparienciaDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario));
+        return Ok(new AparienciaDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Slug, negocio.EsPrincipal));
     }
 
     [HttpPut("apariencia")]
@@ -60,7 +60,7 @@ public class MiNegocioController : ControllerBase
         Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Negocio", negocio.Id, negocio.Nombre, "Apariencia actualizada");
         await _db.SaveChangesAsync();
 
-        return Ok(new AparienciaDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario));
+        return Ok(new AparienciaDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Slug, negocio.EsPrincipal));
     }
 
     // "Roles": qué módulos (de los que además permita el Plan, ver

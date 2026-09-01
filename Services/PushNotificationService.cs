@@ -91,6 +91,47 @@ public class PushNotificationService
         await EnviarATodos(new[] { clienteUsuarioId.Value }, titulo, cuerpo);
     }
 
+    // Mensaje nuevo de un Cliente en el chat: avisa a TODO el staff de la
+    // barbería (Admin/SuperAdmin/Barbero) -- a diferencia de una cita, el
+    // chat no tiene un barbero "asignado" (es un inbox compartido entre
+    // todo el staff, ver ChatController/ChatMensaje.cs), así que le llega
+    // a todos, no solo a uno. No hace falta excluir al autor acá (a
+    // diferencia de NotificarNuevaCita) porque un Cliente nunca puede
+    // tener rol Admin/SuperAdmin/Barbero, así que jamás se auto-incluye.
+    public async Task NotificarMensajeCliente(ChatMensaje mensaje)
+    {
+        var destinatarios = await _db.Usuarios
+            .Where(u => u.NegocioId == mensaje.NegocioId && u.Estado == "Activo")
+            .Where(u => u.Rol == "Admin" || u.Rol == "SuperAdmin" || u.Rol == "Barbero")
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        await EnviarATodos(destinatarios, $"Mensaje de {mensaje.ClienteNombre}", Recortar(mensaje.Texto));
+    }
+
+    // Mensaje nuevo del staff hacia un Cliente: avisa solo a ese Cliente,
+    // si tiene cuenta de acceso (mismo criterio "si no tiene, no hay a
+    // quién avisarle" que ya usa NotificarCambioEstado). ChatMensaje.ClienteId
+    // YA ES el Usuario.Id del cliente (ver el comentario en
+    // Models/ChatMensaje.cs), así que no hace falta un JOIN extra para
+    // resolverlo como en el caso de citas.
+    public async Task NotificarMensajeStaff(ChatMensaje mensaje)
+    {
+        var clienteActivo = await _db.Usuarios.AnyAsync(u => u.Id == mensaje.ClienteId && u.Estado == "Activo");
+        if (!clienteActivo) return;
+
+        await EnviarATodos(new[] { mensaje.ClienteId }, mensaje.AutorNombre, Recortar(mensaje.Texto));
+    }
+
+    // El chat permite hasta 2000 caracteres (ver ChatController.TextoMaxLength),
+    // muy por encima de lo que cualquier notificación del sistema operativo
+    // muestra de forma legible -- se recorta a un preview corto, como hace
+    // cualquier app de mensajería (WhatsApp, Telegram, etc.) en su push.
+    private static string Recortar(string texto, int maximo = 120)
+    {
+        return texto.Length <= maximo ? texto : texto[..maximo].TrimEnd() + "...";
+    }
+
     private async Task EnviarATodos(IReadOnlyCollection<Guid> usuarioIds, string titulo, string cuerpo)
     {
         if (_vapid is null || usuarioIds.Count == 0) return;
