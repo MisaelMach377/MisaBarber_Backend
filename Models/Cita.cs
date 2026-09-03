@@ -41,4 +41,12 @@ public class Cita
     public string? Notas { get; set; }
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+
+    // Si ya se le mandó el push de "tu cita está por empezar" al staff
+    // (ver Services/RecordatorioCitasService.cs). Sin esto, cada vuelta
+    // del background service (cada 5 min, ver ese archivo) volvería a
+    // mandar el mismo recordatorio mientras la cita siga cayendo dentro
+    // de la ventana de "antelación" -- este flag es lo que la hace
+    // dispararse una sola vez por cita.
+    public bool RecordatorioEnviado { get; set; } = false;
 }

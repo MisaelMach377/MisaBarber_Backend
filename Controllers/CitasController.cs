@@ -51,7 +51,13 @@ public class CitasController : ControllerBase
     // así que el total de precio/duración se calcula sumando los de la
     // lista en vez de leerlo de un solo campo -- ver Models/Cita.cs y
     // Models/CitaServicio.cs.
-    private static CitaDto ToDto(Cita c)
+    // tieneResena tiene default false a propósito: la mayoría de llamadas a
+    // ToDto (GetById, Create, Update, CambiarEstado) no necesitan este dato
+    // -- una cita recién creada/editada/cambiada de estado nunca puede
+    // tener reseña todavía (esa solo se crea sobre una ya Completada, ver
+    // CrearResena). Solo GetAll y GetHistorial lo calculan de verdad,
+    // porque son los únicos que le muestran "Tus citas" a un Cliente.
+    private static CitaDto ToDto(Cita c, bool tieneResena = false)
     {
         var servicios = c.CitaServicios
             .Select(cs => new CitaServicioDto(
@@ -76,9 +82,22 @@ public class CitasController : ControllerBase
             c.FechaHora,
             c.Estado,
             c.Notas,
-            c.FechaCreacion
+            c.FechaCreacion,
+            tieneResena
         );
     }
+
+    private static ResenaDto ToResenaDto(Resena r) => new(
+        r.Id,
+        r.CitaId,
+        r.ClienteId,
+        r.Cliente?.Nombre ?? "",
+        r.Cliente?.FotoUrl,
+        r.BarberoId,
+        r.Puntuacion,
+        r.Comentario,
+        r.FechaCreacion
+    );
 
     private static CitaAuditoriaDto ToAuditoriaDto(CitaAuditoria a) => new(
         a.Id,
@@ -140,7 +159,7 @@ public class CitasController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<List<CitaDto>>> GetAll([FromQuery] DateTime? fecha)
     {
-        var dia = (fecha ?? DateTime.Today).Date;
+        var dia = (fecha ?? Reloj.HoyPeru()).Date;
         var siguienteDia = dia.AddDays(1);
 
         var query = ConDatos().Where(c => c.FechaHora >= dia && c.FechaHora < siguienteDia);
@@ -157,7 +176,16 @@ public class CitasController : ControllerBase
 
         var lista = await query.OrderBy(c => c.FechaHora).ToListAsync();
 
-        return Ok(lista.Select(ToDto));
+        // ToHashSetAsync no existe en la versión de EF Core instalada acá
+        // (CS1061 al compilar) -- se trae la lista normal con ToListAsync
+        // (eso sí existe siempre) y se arma el HashSet en memoria, mismo
+        // resultado, un paso más.
+        var idsConResena = (await _db.Resenas
+            .Where(r => lista.Select(c => c.Id).Contains(r.CitaId))
+            .Select(r => r.CitaId)
+            .ToListAsync()).ToHashSet();
+
+        return Ok(lista.Select(c => ToDto(c, idsConResena.Contains(c.Id))));
     }
 
     // GET api/citas/historial?desde=&hasta=&clienteId=&barberoId=&estado=
@@ -205,7 +233,16 @@ public class CitasController : ControllerBase
             .Take(500)
             .ToListAsync();
 
-        return Ok(lista.Select(ToDto));
+        // ToHashSetAsync no existe en la versión de EF Core instalada acá
+        // (CS1061 al compilar) -- se trae la lista normal con ToListAsync
+        // (eso sí existe siempre) y se arma el HashSet en memoria, mismo
+        // resultado, un paso más.
+        var idsConResena = (await _db.Resenas
+            .Where(r => lista.Select(c => c.Id).Contains(r.CitaId))
+            .Select(r => r.CitaId)
+            .ToListAsync()).ToHashSet();
+
+        return Ok(lista.Select(c => ToDto(c, idsConResena.Contains(c.Id))));
     }
 
     // GET api/citas/auditoria?desde=&hasta=&citaId=
@@ -292,13 +329,13 @@ public class CitasController : ControllerBase
         var duracion = Math.Max(servicios.Sum(s => s.DuracionMinutos), 5);
         var apertura = ventana.Apertura!.Value;
         var cierre = ventana.Cierre!.Value;
-        var ahora = DateTime.Now;
+        var ahora = Reloj.AhoraPeru();
 
         var disponibles = new List<string>();
         for (var inicio = apertura; inicio.AddMinutes(duracion) <= cierre; inicio = inicio.AddMinutes(PasoDisponibilidadMinutos))
         {
             // No ofrecer horas que ya pasaron si se está consultando el día de hoy.
-            if (dia == DateTime.Today && inicio <= ahora)
+            if (dia == Reloj.HoyPeru() && inicio <= ahora)
                 continue;
 
             var fin = inicio.AddMinutes(duracion);
@@ -546,6 +583,47 @@ public class CitasController : ControllerBase
         await _notificaciones.NotificarCambioEstado(cita, dto.Estado, usuario.Id, usuario.Rol);
 
         return Ok(ToDto(cita));
+    }
+
+    // POST api/citas/{id}/resena -- solo el Cliente dueño de la cita, y
+    // solo si ya está Completada (no tiene sentido calificar algo que
+    // todavía no pasó, ni una que se canceló). Una cita ya reseñada no se
+    // puede volver a reseñar -- se revisa acá con un SELECT antes, pero la
+    // garantía real es el índice único sobre CitaId (ver
+    // MisaBarberContext.OnModelCreating): si dos requests llegaran casi
+    // al mismo tiempo, el segundo SaveChangesAsync explota con una
+    // excepción de índice único en vez de dejar dos filas.
+    [HttpPost("{id}/resena")]
+    public async Task<ActionResult<ResenaDto>> CrearResena(Guid id, ResenaCreateDto dto)
+    {
+        if (dto.Puntuacion < 1 || dto.Puntuacion > 5)
+            return BadRequest("La puntuación debe ser de 1 a 5.");
+
+        var usuario = HttpContext.UsuarioActual()!;
+        if (usuario.Rol != "Cliente") return Forbid();
+
+        var cita = await ConDatos().FirstOrDefaultAsync(x => x.Id == id);
+        if (cita is null) return NotFound();
+        if (cita.ClienteId != usuario.ClienteId) return Forbid();
+        if (cita.Estado != "Completada") return BadRequest("Solo puedes calificar una cita ya completada.");
+
+        var yaExiste = await _db.Resenas.AnyAsync(r => r.CitaId == id);
+        if (yaExiste) return BadRequest("Esta cita ya tiene una reseña.");
+
+        var resena = new Resena
+        {
+            NegocioId = NegocioId,
+            CitaId = cita.Id,
+            ClienteId = cita.ClienteId,
+            BarberoId = cita.BarberoId,
+            Puntuacion = dto.Puntuacion,
+            Comentario = string.IsNullOrWhiteSpace(dto.Comentario) ? null : dto.Comentario.Trim(),
+        };
+        _db.Resenas.Add(resena);
+        await _db.SaveChangesAsync();
+
+        resena.Cliente = cita.Cliente;
+        return Ok(ToResenaDto(resena));
     }
 
     [HttpDelete("{id}")]

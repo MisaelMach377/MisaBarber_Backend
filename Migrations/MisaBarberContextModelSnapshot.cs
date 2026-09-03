@@ -179,6 +179,9 @@ namespace misabarber.Migrations
                     b.Property<string>("Notas")
                         .HasColumnType("text");
 
+                    b.Property<bool>("RecordatorioEnviado")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ClienteId");
@@ -451,6 +454,47 @@ namespace misabarber.Migrations
                     b.ToTable("Productos");
                 });
 
+            modelBuilder.Entity("misabarber.Models.Resena", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BarberoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CitaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comentario")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Puntuacion")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BarberoId");
+
+                    b.HasIndex("CitaId")
+                        .IsUnique();
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("NegocioId");
+
+                    b.ToTable("Resenas");
+                });
+
             modelBuilder.Entity("misabarber.Models.Servicio", b =>
                 {
                     b.Property<Guid>("Id")
@@ -707,6 +751,41 @@ namespace misabarber.Migrations
                         .HasForeignKey("NegocioId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.Resena", b =>
+                {
+                    b.HasOne("misabarber.Models.Barbero", "Barbero")
+                        .WithMany()
+                        .HasForeignKey("BarberoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Cita", "Cita")
+                        .WithMany()
+                        .HasForeignKey("CitaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Barbero");
+
+                    b.Navigation("Cita");
+
+                    b.Navigation("Cliente");
 
                     b.Navigation("Negocio");
                 });

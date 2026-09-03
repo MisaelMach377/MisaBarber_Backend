@@ -23,13 +23,50 @@ public class BarberosController : ControllerBase
 
     private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
 
-    private static BarberoDto ToDto(Barbero b) => new(b.Id, b.Nombre, b.Telefono, b.Email, b.FotoUrl, b.Estado, b.FechaCreacion);
+    // promedio/total tienen default (null, 0) a propósito -- Create/Update/
+    // CambiarEstado llaman a esto justo después de crear o tocar un
+    // barbero, momento en el que sus reseñas (si las tuviera de antes) no
+    // cambiaron para nada; solo GetAll/GetById necesitan el dato real,
+    // y lo calculan con una query de agregación aparte (ver más abajo)
+    // en vez de traer TODAS las Resenas a memoria por cada barbero.
+    private static BarberoDto ToDto(Barbero b, double? promedio = null, int total = 0) =>
+        new(b.Id, b.Nombre, b.Telefono, b.Email, b.FotoUrl, b.Estado, b.FechaCreacion, promedio, total);
+
+    // Una sola query agrupada para N barberos -- evita el N+1 de consultar
+    // "las reseñas de este barbero" adentro de un loop. Devuelve un
+    // diccionario BarberoId -> (promedio, total) que ya viene limpio: un
+    // barbero sin ninguna reseña simplemente no aparece acá (por eso
+    // ToDto recibe null como default, no 0 -- ver su comentario).
+    private async Task<Dictionary<Guid, (double Promedio, int Total)>> ResumenResenasPorBarbero(IEnumerable<Guid> barberoIds)
+    {
+        var ids = barberoIds.ToList();
+        var filas = await _db.Resenas
+            .Where(r => r.NegocioId == NegocioId && ids.Contains(r.BarberoId))
+            .GroupBy(r => r.BarberoId)
+            .Select(g => new { BarberoId = g.Key, Promedio = g.Average(x => x.Puntuacion), Total = g.Count() })
+            .ToListAsync();
+
+        return filas.ToDictionary(f => f.BarberoId, f => (f.Promedio, f.Total));
+    }
+
+    private static ResenaDto ToResenaDto(Resena r) => new(
+        r.Id,
+        r.CitaId,
+        r.ClienteId,
+        r.Cliente?.Nombre ?? "",
+        r.Cliente?.FotoUrl,
+        r.BarberoId,
+        r.Puntuacion,
+        r.Comentario,
+        r.FechaCreacion
+    );
 
     [HttpGet]
     public async Task<ActionResult<List<BarberoDto>>> GetAll()
     {
         var lista = await _db.Barberos.Where(b => b.NegocioId == NegocioId).OrderBy(b => b.Nombre).ToListAsync();
-        return Ok(lista.Select(ToDto));
+        var resumenes = await ResumenResenasPorBarbero(lista.Select(b => b.Id));
+        return Ok(lista.Select(b => resumenes.TryGetValue(b.Id, out var r) ? ToDto(b, r.Promedio, r.Total) : ToDto(b)));
     }
 
     [HttpGet("{id}")]
@@ -37,7 +74,8 @@ public class BarberosController : ControllerBase
     {
         var b = await _db.Barberos.FirstOrDefaultAsync(x => x.Id == id && x.NegocioId == NegocioId);
         if (b is null) return NotFound();
-        return Ok(ToDto(b));
+        var resumenes = await ResumenResenasPorBarbero(new[] { b.Id });
+        return Ok(resumenes.TryGetValue(b.Id, out var r) ? ToDto(b, r.Promedio, r.Total) : ToDto(b));
     }
 
     [HttpPost]
@@ -171,6 +209,30 @@ public class BarberosController : ControllerBase
 
     private static HorarioBarberoDiaDto ToDiaDto(HorarioBarbero h) =>
         new(h.DiaSemana, h.Trabaja, h.HoraInicio is TimeSpan hi ? Horarios.FormatHora(hi) : null, h.HoraFin is TimeSpan hf ? Horarios.FormatHora(hf) : null);
+
+    // GET api/barberos/{id}/resenas -- promedio + lista de reseñas de este
+    // barbero, más recientes primero. Cualquier cuenta logueada del
+    // Negocio la puede ver (Admin/Barbero/Cliente, ver [RequiereAuth] a
+    // nivel de clase) -- todavía no hay una vista PÚBLICA sin login que
+    // muestre esto (ej. para que un cliente potencial vea el rating antes
+    // de reservar); si se quiere eso más adelante es un endpoint aparte,
+    // sin [RequiereAuth], que no exponga nada más que Puntuacion/
+    // Comentario/fecha.
+    [HttpGet("{id}/resenas")]
+    public async Task<ActionResult<ResumenResenasDto>> GetResenas(Guid id)
+    {
+        var existe = await _db.Barberos.AnyAsync(x => x.Id == id && x.NegocioId == NegocioId);
+        if (!existe) return NotFound();
+
+        var resenas = await _db.Resenas
+            .Where(r => r.BarberoId == id && r.NegocioId == NegocioId)
+            .Include(r => r.Cliente)
+            .OrderByDescending(r => r.FechaCreacion)
+            .ToListAsync();
+
+        var promedio = resenas.Count > 0 ? resenas.Average(r => r.Puntuacion) : 0;
+        return Ok(new ResumenResenasDto(promedio, resenas.Count, resenas.Select(ToResenaDto).ToList()));
+    }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)

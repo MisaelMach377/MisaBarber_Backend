@@ -37,6 +37,25 @@ public class PushNotificationService
             : new VapidDetails(subject, publicKey, privateKey);
     }
 
+    // Recordatorio de "tu cita está por empezar": lo dispara
+    // RecordatorioCitasService (un BackgroundService, no un controller),
+    // así que acá NO hay un actorUsuarioId de quien excluir -- a
+    // diferencia de NotificarNuevaCita, este SIEMPRE le llega a todo el
+    // staff relevante (Admin/SuperAdmin + el barbero asignado), que es
+    // justo a quien el usuario pidió recordarle. Mismo criterio de "solo
+    // si tiene cuenta de acceso" que el resto de este archivo.
+    public async Task NotificarRecordatorio(Cita cita)
+    {
+        var destinatarios = await _db.Usuarios
+            .Where(u => u.NegocioId == cita.NegocioId && u.Estado == "Activo")
+            .Where(u => u.Rol == "Admin" || u.Rol == "SuperAdmin" || (u.Rol == "Barbero" && u.BarberoId == cita.BarberoId))
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        var hora = cita.FechaHora.ToString("HH:mm");
+        await EnviarATodos(destinatarios, "Tu próxima cita está por empezar", $"{cita.Cliente?.Nombre} a las {hora}");
+    }
+
     // Cita nueva: avisa al staff (Admin + el barbero asignado, si tiene
     // cuenta de acceso -- no todos la tienen, ver Models/Usuario.cs) --
     // salvo a quien la creó, para no auto-notificar a un Admin/Barbero que

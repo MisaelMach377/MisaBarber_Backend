@@ -33,6 +33,12 @@ builder.Services.AddSwaggerGen();
 // ---- Notificaciones push (Web Push + VAPID, ver Services/PushNotificationService.cs) ----
 builder.Services.AddScoped<PushNotificationService>();
 
+// ---- Recordatorio automático de citas (push 30 min antes, ver
+// Services/RecordatorioCitasService.cs) -- AddHostedService, no
+// AddScoped: este corre en un loop propio durante toda la vida del
+// proceso, no por request como los controllers.
+builder.Services.AddHostedService<RecordatorioCitasService>();
+
 // ---- Cloudinary (fotos de Clientes/Barberos/Usuarios/Negocios, ver
 // UploadController) ----
 // Antes las fotos se guardaban en wwwroot/uploads -- en Railway el

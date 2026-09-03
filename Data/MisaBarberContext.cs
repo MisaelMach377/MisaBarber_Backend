@@ -36,6 +36,7 @@ public class MisaBarberContext : DbContext
     public DbSet<HorarioNegocio> HorariosNegocio => Set<HorarioNegocio>();
     public DbSet<HorarioBarbero> HorariosBarbero => Set<HorarioBarbero>();
     public DbSet<Producto> Productos => Set<Producto>();
+    public DbSet<Resena> Resenas => Set<Resena>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -292,5 +293,42 @@ public class MisaBarberContext : DbContext
             .HasForeignKey(p => p.NegocioId)
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Producto>().HasIndex(p => p.NegocioId);
+
+        // Resena: Restrict en Negocio/Cliente/Barbero -- mismo criterio que
+        // el resto de FKs del sistema, no se pierde una reseña ya escrita
+        // solo porque alguien intenta borrar el cliente o el barbero. Con
+        // Cita en cambio es un caso propio: una Cita ya Completada nunca se
+        // puede borrar (ver CitasController.Delete), así que en la
+        // práctica esta FK jamás bloquea nada -- Restrict igual queda como
+        // segunda red de seguridad, no porque se espere que dispare.
+        // El índice único en CitaId es la regla real de "una reseña por
+        // cita" (ver Models/Resena.cs) -- CitasController.CrearResena
+        // igual revisa antes de insertar, pero esto es lo que la garantiza
+        // de verdad ante una condición de carrera.
+        modelBuilder.Entity<Resena>()
+            .HasOne(r => r.Negocio)
+            .WithMany()
+            .HasForeignKey(r => r.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Resena>()
+            .HasOne(r => r.Cita)
+            .WithMany()
+            .HasForeignKey(r => r.CitaId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Resena>()
+            .HasOne(r => r.Cliente)
+            .WithMany()
+            .HasForeignKey(r => r.ClienteId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Resena>()
+            .HasOne(r => r.Barbero)
+            .WithMany()
+            .HasForeignKey(r => r.BarberoId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<Resena>()
+            .HasIndex(r => r.CitaId)
+            .IsUnique();
+        modelBuilder.Entity<Resena>()
+            .HasIndex(r => r.BarberoId);
     }
 }

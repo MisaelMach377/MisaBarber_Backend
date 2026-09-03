@@ -30,7 +30,12 @@ public record CitaDto(
     DateTime FechaHora,
     string Estado,
     string? Notas,
-    DateTime FechaCreacion
+    DateTime FechaCreacion,
+    // Solo relevante cuando Estado == "Completada" -- le dice a MiCuenta.jsx
+    // si ya mostrar el botón "Calificar" o el resultado ya dejado (ver
+    // CitasController.ToDto y GetAll/GetHistorial, que son los únicos dos
+    // lugares que lo calculan; false en el resto porque no se necesita).
+    bool TieneResena
 );
 
 public record CitaCreateDto(Guid ClienteId, Guid BarberoId, List<Guid> ServicioIds, DateTime FechaHora, string? Notas);
