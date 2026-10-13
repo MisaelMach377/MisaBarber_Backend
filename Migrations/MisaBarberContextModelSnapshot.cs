@@ -507,12 +507,18 @@ namespace misabarber.Migrations
                     b.Property<int>("DuracionMinutos")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("EsEspecial")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Estado")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FotoUrl")
+                        .HasColumnType("text");
 
                     b.Property<Guid>("NegocioId")
                         .HasColumnType("uuid");

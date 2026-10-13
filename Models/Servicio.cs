@@ -25,6 +25,13 @@ public class Servicio
     // agenden dos citas al mismo barbero que se pisen en el tiempo.
     public int DuracionMinutos { get; set; } = 30;
 
+    // Servicio especial (pintada de cabello, tratamientos, etc.): sigue siendo
+    // un Servicio normal -- se agenda, tiene duración y entra en una Cita --
+    // pero en MiCuenta.jsx se muestra en su propia vitrina con foto, debajo de
+    // los productos, en vez de en la carta de texto del paso 1.
+    public bool EsEspecial { get; set; }
+    public string? FotoUrl { get; set; }
+
     public string Estado { get; set; } = "Activo"; // Activo | Inactivo
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;

@@ -23,7 +23,7 @@ public class ServiciosController : ControllerBase
 
     private Guid NegocioId => HttpContext.UsuarioActual()!.NegocioId;
 
-    private static ServicioDto ToDto(Servicio s) => new(s.Id, s.Nombre, s.Descripcion, s.Precio, s.DuracionMinutos, s.Estado, s.FechaCreacion);
+    private static ServicioDto ToDto(Servicio s) => new(s.Id, s.Nombre, s.Descripcion, s.Precio, s.DuracionMinutos, s.Estado, s.FechaCreacion, s.FotoUrl, s.EsEspecial);
 
     [HttpGet]
     public async Task<ActionResult<List<ServicioDto>>> GetAll()
@@ -57,6 +57,8 @@ public class ServiciosController : ControllerBase
             Descripcion = string.IsNullOrWhiteSpace(dto.Descripcion) ? null : dto.Descripcion.Trim(),
             Precio = dto.Precio,
             DuracionMinutos = dto.DuracionMinutos,
+            FotoUrl = string.IsNullOrWhiteSpace(dto.FotoUrl) ? null : dto.FotoUrl,
+            EsEspecial = dto.EsEspecial,
         };
 
         _db.Servicios.Add(servicio);
@@ -82,6 +84,8 @@ public class ServiciosController : ControllerBase
         s.Descripcion = string.IsNullOrWhiteSpace(dto.Descripcion) ? null : dto.Descripcion.Trim();
         s.Precio = dto.Precio;
         s.DuracionMinutos = dto.DuracionMinutos;
+        s.FotoUrl = string.IsNullOrWhiteSpace(dto.FotoUrl) ? null : dto.FotoUrl;
+        s.EsEspecial = dto.EsEspecial;
 
         await _db.SaveChangesAsync();
         return Ok(ToDto(s));
