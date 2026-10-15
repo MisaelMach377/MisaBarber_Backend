@@ -11,7 +11,7 @@ namespace misabarber.Utils;
 public static class Modulos
 {
     public static readonly string[] Todos =
-        { "Citas", "Clientes", "Barberos", "Servicios", "Productos", "Historial", "Reportes", "Apariencia", "Chat" };
+        { "Citas", "Clientes", "Barberos", "Servicios", "Productos", "Reservas", "Historial", "Reportes", "Apariencia", "Chat" };
 
     // Free = lo básico para operar el día a día. Pro suma reportes/
     // historial (análisis) y apariencia (marca propia) -- ver la
@@ -21,7 +21,7 @@ public static class Modulos
     // mostrador es operar el día a día, no un feature de análisis/marca.
     public static readonly Dictionary<string, string[]> PorPlan = new()
     {
-        ["Free"] = new[] { "Citas", "Clientes", "Barberos", "Servicios", "Productos" },
+        ["Free"] = new[] { "Citas", "Clientes", "Barberos", "Servicios", "Productos", "Reservas" },
         ["Pro"] = Todos,
     };
 

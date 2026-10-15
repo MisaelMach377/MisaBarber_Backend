@@ -110,6 +110,53 @@ public class PushNotificationService
         await EnviarATodos(new[] { clienteUsuarioId.Value }, titulo, cuerpo);
     }
 
+    // Reserva nueva de un producto: avisa a los Admin/SuperAdmin (el stock es
+    // cosa del dueño, no del barbero) -- salvo a quien la creó, por si es el
+    // propio Admin reservando a nombre de un cliente.
+    public async Task NotificarNuevaReserva(ReservaProducto reserva, string clienteNombre, string productoNombre, Guid actorUsuarioId)
+    {
+        var destinatarios = await _db.Usuarios
+            .Where(u => u.NegocioId == reserva.NegocioId && u.Estado == "Activo" && u.Id != actorUsuarioId)
+            .Where(u => u.Rol == "Admin" || u.Rol == "SuperAdmin")
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        await EnviarATodos(destinatarios, "Nueva reserva", $"{clienteNombre} reservó {reserva.Cantidad} × {productoNombre}");
+    }
+
+    // La barbería resolvió la reserva (entregada/cancelada): avisa al cliente
+    // si tiene cuenta de acceso. Mismo criterio que NotificarCambioEstado.
+    public async Task NotificarReservaResuelta(ReservaProducto reserva, string productoNombre, string estado, Guid actorUsuarioId)
+    {
+        var clienteUsuarioId = await _db.Usuarios
+            .Where(u => u.NegocioId == reserva.NegocioId && u.Estado == "Activo" && u.Rol == "Cliente" && u.ClienteId == reserva.ClienteId && u.Id != actorUsuarioId)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync();
+        if (clienteUsuarioId is null) return;
+
+        var (titulo, cuerpo) = estado switch
+        {
+            "Entregada" => ("Reserva entregada", $"Gracias por llevar {productoNombre}."),
+            "Cancelada" => ("Reserva cancelada", $"La barbería canceló tu reserva de {productoNombre}."),
+            _ => ("Reserva actualizada", $"Tu reserva de {productoNombre} cambió de estado."),
+        };
+        await EnviarATodos(new[] { clienteUsuarioId.Value }, titulo, cuerpo);
+    }
+
+    // Aviso al cliente el día que vence su reserva (lo manda
+    // ReservasVencimientoService). Solo si tiene cuenta de acceso.
+    public async Task NotificarReservaPorVencer(ReservaProducto reserva, string productoNombre)
+    {
+        var clienteUsuarioId = await _db.Usuarios
+            .Where(u => u.NegocioId == reserva.NegocioId && u.Estado == "Activo" && u.Rol == "Cliente" && u.ClienteId == reserva.ClienteId)
+            .Select(u => (Guid?)u.Id)
+            .FirstOrDefaultAsync();
+        if (clienteUsuarioId is null) return;
+
+        await EnviarATodos(new[] { clienteUsuarioId.Value }, "Tu reserva vence hoy",
+            $"Pasa hoy a recoger {reserva.Cantidad} × {productoNombre}; si no, se libera.");
+    }
+
     // Mensaje nuevo de un Cliente en el chat: avisa a TODO el staff de la
     // barbería (Admin/SuperAdmin/Barbero) -- a diferencia de una cita, el
     // chat no tiene un barbero "asignado" (es un inbox compartido entre

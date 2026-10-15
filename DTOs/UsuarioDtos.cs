@@ -41,7 +41,12 @@ public record UsuarioDto(
     // NegocioDireccion para pintar el pin, porque son precisas y no
     // dependen de que Google adivine bien una búsqueda de texto.
     double? NegocioLatitud,
-    double? NegocioLongitud
+    double? NegocioLongitud,
+    // Slug de SU negocio (null = la barbería principal, que entra por /login sin
+    // slug). El front lo compara con el slug de la URL para no "adoptar" una
+    // sesión guardada de OTRA barbería: el token vive en localStorage, que es
+    // uno solo por origen (todas las barberías comparten dominio).
+    string? NegocioSlug = null
 );
 
 public record UsuarioCreateDto(string Nombre, string Email, string Password, string Rol, Guid? BarberoId, string? FotoUrl);

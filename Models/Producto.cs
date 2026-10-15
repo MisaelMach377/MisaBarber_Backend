@@ -28,6 +28,20 @@ public class Producto
     // el comentario de arriba sobre por qué no se descuenta sola todavía.
     public int Stock { get; set; }
 
+    // Debajo (o igual) de este número el panel avisa "Stock bajo". Por producto
+    // (una cera que rota mucho necesita avisar antes que una navaja). 5 = el
+    // umbral fijo que tenía Productos.jsx, así los productos existentes no
+    // cambian de comportamiento al migrar.
+    public int StockMinimo { get; set; } = 5;
+
+    // Unidades de Stock que están APARTADAS por reservas Pendientes (ver
+    // Models/ReservaProducto.cs). Es un contador denormalizado a propósito:
+    // recalcularlo con un SUM de reservas en cada lectura del catálogo sería
+    // caro y, peor, no se podría proteger con un UPDATE atómico. Disponible
+    // para reservar = Stock - StockReservado; el invariante es
+    // 0 <= StockReservado <= Stock (lo cuidan las condiciones de cada UPDATE).
+    public int StockReservado { get; set; }
+
     public string? FotoUrl { get; set; }
 
     public string Estado { get; set; } = "Activo"; // Activo | Inactivo

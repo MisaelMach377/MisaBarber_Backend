@@ -39,7 +39,8 @@ public class AuthController : ControllerBase
         return new(
             u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
             negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Plan, ModulosPara(u, negocio), horario, negocio.Direccion,
-            negocio.Latitud, negocio.Longitud
+            negocio.Latitud, negocio.Longitud,
+            negocio.EsPrincipal ? null : negocio.Slug
         );
     }
 
@@ -195,6 +196,78 @@ public class AuthController : ControllerBase
         var negocio = await ResolverNegocio(slug);
         if (negocio is null) return NotFound();
         return Ok(new NegocioPublicoDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario));
+    }
+
+    // Web App Manifest de UNA barbería, como archivo REAL servido por URL
+    // (el front lo cuelga en <link rel="manifest" href=".../auth/manifest?slug=x">).
+    // Antes el manifest se armaba en el navegador como Blob URL después de
+    // cargar JS: el navegador no puede volver a pedirlo (ni para instalar ni para
+    // revisar actualizaciones de la app ya instalada), así que el nombre/ícono
+    // dependían de qué logo alcanzaba a medirse primero. Acá el contenido es
+    // determinista: mismo slug => mismo manifest, siempre. Público (sin sesión), por
+    // el mismo motivo que /auth/negocio.
+    [HttpGet("manifest")]
+    public async Task<IActionResult> ObtenerManifest([FromQuery] string? slug)
+    {
+        var negocio = await ResolverNegocio(slug);
+        var frontend = (_config["Cors:FrontendOrigin"] ?? "http://localhost:5173").TrimEnd('/');
+        var backend = $"{Request.Scheme}://{Request.Host}";
+
+        var nombre = negocio?.Nombre ?? "MisaBarber";
+        var color = negocio?.ColorPrimario ?? "#0f172a";
+        var slugFinal = negocio is { EsPrincipal: false } ? negocio.Slug : null;
+
+        // Logo del negocio: URL absoluta de Cloudinary, o ruta relativa del
+        // backend. Para Cloudinary se piden dos PNG cuadrados (192 y 512, lo que
+        // Chrome exige para instalar) con la transformación en la URL -- así el
+        // tamaño declarado es el real, sin tener que medir la imagen.
+        var iconos = new List<object>();
+        var logo = negocio?.LogoUrl;
+        if (string.IsNullOrWhiteSpace(logo))
+        {
+            iconos.Add(new { src = $"{frontend}/favicon-misabarber.png", sizes = "256x256", type = "image/png", purpose = "any" });
+        }
+        else
+        {
+            var abs = logo.StartsWith("http") ? logo : $"{backend}{logo}";
+            if (abs.Contains("/image/upload/"))
+            {
+                foreach (var t in new[] { 192, 512 })
+                    iconos.Add(new
+                    {
+                        src = abs.Replace("/image/upload/", $"/image/upload/w_{t},h_{t},c_pad,b_rgb:0f172a,f_png/"),
+                        sizes = $"{t}x{t}",
+                        type = "image/png",
+                        purpose = "any",
+                    });
+            }
+            else
+            {
+                iconos.Add(new { src = abs, sizes = "512x512", type = "image/png", purpose = "any" });
+            }
+        }
+
+        var manifest = new
+        {
+            name = nombre,
+            short_name = nombre.Length > 12 ? nombre[..11] + "…" : nombre,
+            description = $"Reserva tu cita en {nombre}.",
+            start_url = slugFinal is null ? $"{frontend}/" : $"{frontend}/{slugFinal}/login",
+            scope = $"{frontend}/",
+            id = $"{frontend}/?negocio={slugFinal ?? "principal"}",
+            display = "standalone",
+            background_color = "#0f172a",
+            theme_color = color,
+            icons = iconos,
+        };
+
+        Response.Headers.CacheControl = "public, max-age=300";
+        return new ContentResult
+        {
+            Content = System.Text.Json.JsonSerializer.Serialize(manifest),
+            ContentType = "application/manifest+json",
+            StatusCode = 200,
+        };
     }
 
     // Cambio de contraseña desde "Mi perfil" — pide la contraseña actual a

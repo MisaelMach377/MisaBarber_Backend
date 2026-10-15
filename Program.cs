@@ -39,6 +39,10 @@ builder.Services.AddScoped<PushNotificationService>();
 // proceso, no por request como los controllers.
 builder.Services.AddHostedService<RecordatorioCitasService>();
 
+// ---- Vencimiento automático de reservas de productos (ver
+// Services/ReservasVencimientoService.cs) -- mismo motivo que arriba.
+builder.Services.AddHostedService<ReservasVencimientoService>();
+
 // ---- Cloudinary (fotos de Clientes/Barberos/Usuarios/Negocios, ver
 // UploadController) ----
 // Antes las fotos se guardaban en wwwroot/uploads -- en Railway el

@@ -350,6 +350,50 @@ namespace misabarber.Migrations
                     b.ToTable("HorariosNegocio");
                 });
 
+            modelBuilder.Entity("misabarber.Models.MovimientoStock", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Cantidad")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Motivo")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProductoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("StockResultante")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UsuarioNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NegocioId");
+
+                    b.HasIndex("ProductoId", "Fecha");
+
+                    b.ToTable("MovimientosStock");
+                });
+
             modelBuilder.Entity("misabarber.Models.Negocio", b =>
                 {
                     b.Property<Guid>("Id")
@@ -447,6 +491,12 @@ namespace misabarber.Migrations
                     b.Property<int>("Stock")
                         .HasColumnType("integer");
 
+                    b.Property<int>("StockMinimo")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StockReservado")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("NegocioId");
@@ -493,6 +543,64 @@ namespace misabarber.Migrations
                     b.HasIndex("NegocioId");
 
                     b.ToTable("Resenas");
+                });
+
+            modelBuilder.Entity("misabarber.Models.ReservaProducto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AvisoVencimientoEnviado")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Cantidad")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CreadaPorAdmin")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("FechaResolucion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("FechaVence")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Nota")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PrecioUnitario")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid>("ProductoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResueltoPorNombre")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductoId");
+
+                    b.HasIndex("ClienteId", "Estado");
+
+                    b.HasIndex("NegocioId", "Estado", "FechaVence");
+
+                    b.ToTable("ReservasProductos");
                 });
 
             modelBuilder.Entity("misabarber.Models.Servicio", b =>
@@ -627,6 +735,67 @@ namespace misabarber.Migrations
                     b.ToTable("Usuarios");
                 });
 
+            modelBuilder.Entity("misabarber.Models.VentaProducto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Cantidad")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ClienteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClienteNombre")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("NegocioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("PrecioUnitario")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid?>("ProductoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProductoNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("ReservaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UsuarioNombre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId");
+
+                    b.HasIndex("ProductoId");
+
+                    b.HasIndex("NegocioId", "Fecha");
+
+                    b.ToTable("VentasProductos");
+                });
+
             modelBuilder.Entity("misabarber.Models.AuditoriaGeneral", b =>
                 {
                     b.HasOne("misabarber.Models.Negocio", "Negocio")
@@ -750,6 +919,25 @@ namespace misabarber.Migrations
                     b.Navigation("Negocio");
                 });
 
+            modelBuilder.Entity("misabarber.Models.MovimientoStock", b =>
+                {
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Producto", "Producto")
+                        .WithMany()
+                        .HasForeignKey("ProductoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Negocio");
+
+                    b.Navigation("Producto");
+                });
+
             modelBuilder.Entity("misabarber.Models.Producto", b =>
                 {
                     b.HasOne("misabarber.Models.Negocio", "Negocio")
@@ -794,6 +982,33 @@ namespace misabarber.Migrations
                     b.Navigation("Cliente");
 
                     b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.ReservaProducto", b =>
+                {
+                    b.HasOne("misabarber.Models.Cliente", "Cliente")
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Producto", "Producto")
+                        .WithMany()
+                        .HasForeignKey("ProductoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Cliente");
+
+                    b.Navigation("Negocio");
+
+                    b.Navigation("Producto");
                 });
 
             modelBuilder.Entity("misabarber.Models.Servicio", b =>
@@ -841,6 +1056,29 @@ namespace misabarber.Migrations
                     b.Navigation("Cliente");
 
                     b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.VentaProducto", b =>
+                {
+                    b.HasOne("misabarber.Models.Cliente", null)
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("misabarber.Models.Negocio", "Negocio")
+                        .WithMany()
+                        .HasForeignKey("NegocioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("misabarber.Models.Producto", "Producto")
+                        .WithMany()
+                        .HasForeignKey("ProductoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Negocio");
+
+                    b.Navigation("Producto");
                 });
 
             modelBuilder.Entity("misabarber.Models.Cita", b =>

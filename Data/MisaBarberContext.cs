@@ -36,6 +36,9 @@ public class MisaBarberContext : DbContext
     public DbSet<HorarioNegocio> HorariosNegocio => Set<HorarioNegocio>();
     public DbSet<HorarioBarbero> HorariosBarbero => Set<HorarioBarbero>();
     public DbSet<Producto> Productos => Set<Producto>();
+    public DbSet<MovimientoStock> MovimientosStock => Set<MovimientoStock>();
+    public DbSet<ReservaProducto> ReservasProductos => Set<ReservaProducto>();
+    public DbSet<VentaProducto> VentasProductos => Set<VentaProducto>();
     public DbSet<Resena> Resenas => Set<Resena>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -293,6 +296,73 @@ public class MisaBarberContext : DbContext
             .HasForeignKey(p => p.NegocioId)
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Producto>().HasIndex(p => p.NegocioId);
+
+        // MovimientoStock: el historial vive y muere con su Producto (Cascade en
+        // ProductoId -- si se elimina el producto, su historial no tiene a qué
+        // apuntar; el "Eliminado" queda en AuditoriaGeneral). NegocioId Restrict,
+        // mismo criterio que el resto de las tablas del negocio.
+        modelBuilder.Entity<MovimientoStock>()
+            .HasOne(m => m.Producto)
+            .WithMany()
+            .HasForeignKey(m => m.ProductoId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MovimientoStock>()
+            .HasOne(m => m.Negocio)
+            .WithMany()
+            .HasForeignKey(m => m.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MovimientoStock>().HasIndex(m => new { m.ProductoId, m.Fecha });
+        modelBuilder.Entity<MovimientoStock>().HasIndex(m => m.NegocioId);
+
+        // ReservaProducto: Cascade con Producto (mismo criterio que
+        // MovimientoStock -- el borrado de un producto con reservas
+        // Pendientes se bloquea antes, en ProductosController.Delete);
+        // Restrict con Cliente y Negocio, como el resto del sistema: no se
+        // pierde el rastro de quién reservó porque alguien borre al cliente.
+        modelBuilder.Entity<ReservaProducto>()
+            .HasOne(r => r.Producto)
+            .WithMany()
+            .HasForeignKey(r => r.ProductoId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReservaProducto>()
+            .HasOne(r => r.Cliente)
+            .WithMany()
+            .HasForeignKey(r => r.ClienteId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ReservaProducto>()
+            .HasOne(r => r.Negocio)
+            .WithMany()
+            .HasForeignKey(r => r.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ReservaProducto>().Property(r => r.PrecioUnitario).HasPrecision(10, 2);
+        // Las dos consultas calientes: "reservas del negocio por estado" (panel
+        // del Admin y servicio de vencimiento) y "mis reservas" (cliente).
+        modelBuilder.Entity<ReservaProducto>().HasIndex(r => new { r.NegocioId, r.Estado, r.FechaVence });
+        modelBuilder.Entity<ReservaProducto>().HasIndex(r => new { r.ClienteId, r.Estado });
+        modelBuilder.Entity<ReservaProducto>().HasIndex(r => r.ProductoId);
+
+        // VentaProducto: SetNull (no Cascade) en Producto y Cliente a propósito --
+        // la venta guarda los nombres denormalizados, así que si se borra el
+        // producto o el cliente, los ingresos del reporte no desaparecen.
+        modelBuilder.Entity<VentaProducto>()
+            .HasOne(v => v.Producto)
+            .WithMany()
+            .HasForeignKey(v => v.ProductoId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<VentaProducto>()
+            .HasOne<Cliente>()
+            .WithMany()
+            .HasForeignKey(v => v.ClienteId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<VentaProducto>()
+            .HasOne(v => v.Negocio)
+            .WithMany()
+            .HasForeignKey(v => v.NegocioId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<VentaProducto>().Property(v => v.PrecioUnitario).HasPrecision(10, 2);
+        modelBuilder.Entity<VentaProducto>().Property(v => v.Total).HasPrecision(12, 2);
+        modelBuilder.Entity<VentaProducto>().HasIndex(v => new { v.NegocioId, v.Fecha });
+        modelBuilder.Entity<VentaProducto>().HasIndex(v => v.ProductoId);
 
         // Resena: Restrict en Negocio/Cliente/Barbero -- mismo criterio que
         // el resto de FKs del sistema, no se pierde una reseña ya escrita
