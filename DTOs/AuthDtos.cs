@@ -14,7 +14,7 @@ public record CambiarContrasenaDto(string ContrasenaActual, string ContrasenaNue
 // Up"). Telefono es opcional a propósito -- no todos lo van a llenar en
 // el primer paso, y no bloquea la creación de la cuenta. Slug: misma idea
 // que en LoginDto -- a qué barbería se está registrando este cliente.
-public record RegistroClienteDto(string Nombre, string Email, string? Telefono, string Password, string? Slug = null);
+public record RegistroClienteDto(string Nombre, string Email, string? Telefono, string Password, string? Slug = null, string? EmailContacto = null);
 
 // "Olvidé mi contraseña": paso 1 (pedir el link) y paso 2 (canjearlo).
 // Slug: a qué barbería pertenece el correo (mismo criterio que LoginDto).

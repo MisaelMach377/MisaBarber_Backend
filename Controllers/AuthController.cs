@@ -151,6 +151,15 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
             return BadRequest("La contraseña debe tener al menos 6 caracteres.");
 
+        if (!Validaciones.TelefonoValido(telefono))
+            return BadRequest("El celular debe tener solo dígitos (máximo 15).");
+        if (!UsuariosController.TryContacto(dto.EmailContacto, out var contacto))
+            return BadRequest("El correo de contacto no es válido.");
+        // El correo de acceso es del dominio de la app (no recibe mails): sin
+        // contacto real, "olvidé mi contraseña" mandaría el enlace a la nada.
+        if (contacto is null)
+            return BadRequest("Ingresa un correo de contacto.");
+
         var yaExiste = await _db.Usuarios.AnyAsync(u => u.NegocioId == negocio.Id && u.Email.ToLower() == email);
         if (yaExiste)
             return Conflict("Ya existe una cuenta con ese correo en esta barbería.");
@@ -170,6 +179,7 @@ public class AuthController : ControllerBase
             Nombre = nombre,
             Email = email,
             PasswordHash = PasswordHasher.Hash(dto.Password),
+            EmailContacto = contacto,
             Rol = "Cliente",
             ClienteId = cliente.Id,
         };
