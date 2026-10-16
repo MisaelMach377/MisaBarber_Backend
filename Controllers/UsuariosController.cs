@@ -33,8 +33,27 @@ public class UsuariosController : ControllerBase
 
     private UsuarioDto ToDto(Usuario u) => new(
         u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
-        "", null, "#2563eb", "Pro", Array.Empty<string>(), new List<HorarioNegocioDiaDto>(), null, null, null
+        "", null, "#2563eb", "Pro", Array.Empty<string>(), new List<HorarioNegocioDiaDto>(), null, null, null,
+        null, u.EmailContacto
     );
+
+    // Devuelve (true, valor) con el correo normalizado, o null si viene
+    // vacío; (false, _) si tiene formato inválido.
+    internal static bool TryContacto(string? crudo, out string? valor)
+    {
+        valor = null;
+        if (string.IsNullOrWhiteSpace(crudo)) return true;
+        var limpio = crudo.Trim();
+        if (limpio.Length > 254) return false;
+        try
+        {
+            var m = new System.Net.Mail.MailAddress(limpio);
+            if (m.Address != limpio || !m.Host.Contains('.')) return false;
+        }
+        catch (FormatException) { return false; }
+        valor = limpio.ToLower();
+        return true;
+    }
 
     private IQueryable<Usuario> ConBarbero() => _db.Usuarios.Include(u => u.Barbero).Where(u => u.NegocioId == NegocioId);
 
@@ -71,6 +90,9 @@ public class UsuariosController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
             return BadRequest("La contraseña debe tener al menos 6 caracteres.");
 
+        if (!TryContacto(dto.EmailContacto, out var contacto))
+            return BadRequest("El correo de contacto no es válido.");
+
         var email = dto.Email.Trim().ToLower();
         var yaExiste = await _db.Usuarios.AnyAsync(u => u.NegocioId == NegocioId && u.Email.ToLower() == email);
         if (yaExiste)
@@ -90,6 +112,7 @@ public class UsuariosController : ControllerBase
             NegocioId = NegocioId,
             Nombre = dto.Nombre,
             Email = dto.Email.Trim(),
+            EmailContacto = contacto,
             PasswordHash = PasswordHasher.Hash(dto.Password),
             Rol = dto.Rol,
             BarberoId = dto.Rol == "Barbero" ? dto.BarberoId : null,
@@ -119,6 +142,9 @@ public class UsuariosController : ControllerBase
         if (dto.Rol == "SuperAdmin" && HttpContext.UsuarioActual()!.Rol != "SuperAdmin")
             return Forbid();
 
+        if (!TryContacto(dto.EmailContacto, out var contacto))
+            return BadRequest("El correo de contacto no es válido.");
+
         var email = dto.Email.Trim().ToLower();
         var otroConEseCorreo = await _db.Usuarios.AnyAsync(u => u.Id != id && u.NegocioId == NegocioId && u.Email.ToLower() == email);
         if (otroConEseCorreo)
@@ -135,6 +161,7 @@ public class UsuariosController : ControllerBase
 
         usuario.Nombre = dto.Nombre;
         usuario.Email = dto.Email.Trim();
+        usuario.EmailContacto = contacto;
         usuario.Rol = dto.Rol;
         usuario.BarberoId = dto.Rol == "Barbero" ? dto.BarberoId : null;
         if (dto.FotoUrl is not null)

@@ -4,6 +4,8 @@ using misabarber.Data;
 using misabarber.Models;
 using misabarber.Utils;
 using misabarber.Services;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +34,57 @@ builder.Services.AddSwaggerGen();
 
 // ---- Notificaciones push (Web Push + VAPID, ver Services/PushNotificationService.cs) ----
 builder.Services.AddScoped<PushNotificationService>();
+
+// ---- Correos (Brevo por HTTP, ver Services/EmailService.cs) ----
+builder.Services.AddHttpClient<EmailService>(c => c.Timeout = TimeSpan.FromSeconds(15));
+
+// ---- Rate limiting (anti fuerza bruta / spam en endpoints públicos) ----
+// Límite por IP del cliente, con ventana fija. Los 429 pasan por CORS antes
+// (UseCors va antes de UseRateLimiter), así el front recibe el mensaje en
+// vez de un error de red opaco. Ojo: detrás del proxy de Railway la IP real
+// llega en X-Forwarded-For -- por eso el UseForwardedHeaders de más abajo;
+// sin él todos los usuarios compartirían la IP del proxy y se bloquearían
+// entre sí.
+static RateLimitPartition<string> PorIp(HttpContext ctx, int max, TimeSpan ventana) =>
+    RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = max, Window = ventana, QueueLimit = 0 });
+
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.OnRejected = async (ctx, ct) =>
+    {
+        if (ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var espera))
+            ctx.HttpContext.Response.Headers.RetryAfter = ((int)espera.TotalSeconds).ToString();
+        ctx.HttpContext.Response.ContentType = "text/plain; charset=utf-8";
+        await ctx.HttpContext.Response.WriteAsync("Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", ct);
+    };
+    // Login: 10 por minuto por IP (sobra para una persona real, frena fuerza bruta).
+    o.AddPolicy("login", ctx => PorIp(ctx, 10, TimeSpan.FromMinutes(1)));
+    // Registro: 5 cuentas cada 10 min por IP (frena creación masiva).
+    o.AddPolicy("registro", ctx => PorIp(ctx, 5, TimeSpan.FromMinutes(10)));
+    // Pedir link de recuperación: 5 cada 10 min por IP (frena "mail bombing").
+    o.AddPolicy("recuperar", ctx => PorIp(ctx, 5, TimeSpan.FromMinutes(10)));
+    // Canjear el token: 10 cada 10 min por IP.
+    o.AddPolicy("restablecer", ctx => PorIp(ctx, 10, TimeSpan.FromMinutes(10)));
+});
+
+// Railway: confiar en su proxy para leer la IP real del cliente.
+if (esRailway)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        // La IP del proxy de Railway cambia: no hay lista fija que declarar.
+        // Es seguro porque el contenedor solo es alcanzable a través de ese
+        // proxy; ForwardLimit=1 (default) toma solo la ÚLTIMA entrada de
+        // X-Forwarded-For, la que agrega Railway -- un atacante no puede
+        // falsificar su IP metiendo un header propio.
+        o.KnownNetworks.Clear();
+        o.KnownProxies.Clear();
+    });
+}
 
 // ---- Recordatorio automático de citas (push 30 min antes, ver
 // Services/RecordatorioCitasService.cs) -- AddHostedService, no
@@ -82,6 +135,9 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 // ---- Pipeline ----
+// Primero de todo: reescribe RemoteIpAddress con la IP real del cliente.
+if (esRailway) app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -104,6 +160,8 @@ if (!esRailway)
 app.UseStaticFiles();
 
 app.UseCors("Frontend");
+
+app.UseRateLimiter();
 
 // ---- Auth (JWT casero, ver Utils/JwtHelper.cs) ----
 // Lee el header Authorization en cada request y, si el token es válido dado

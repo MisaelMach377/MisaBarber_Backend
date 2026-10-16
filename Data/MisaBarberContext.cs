@@ -40,6 +40,7 @@ public class MisaBarberContext : DbContext
     public DbSet<ReservaProducto> ReservasProductos => Set<ReservaProducto>();
     public DbSet<VentaProducto> VentasProductos => Set<VentaProducto>();
     public DbSet<Resena> Resenas => Set<Resena>();
+    public DbSet<RecuperacionContrasena> RecuperacionesContrasena => Set<RecuperacionContrasena>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -400,5 +401,19 @@ public class MisaBarberContext : DbContext
             .IsUnique();
         modelBuilder.Entity<Resena>()
             .HasIndex(r => r.BarberoId);
+
+        // Links de "Olvidé mi contraseña": si se borra el Usuario se van con
+        // él (Cascade, no tiene sentido un token huérfano). TokenHash único
+        // e indexado: el canje busca por ahí en cada intento.
+        modelBuilder.Entity<RecuperacionContrasena>()
+            .HasOne(r => r.Usuario)
+            .WithMany()
+            .HasForeignKey(r => r.UsuarioId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<RecuperacionContrasena>()
+            .HasIndex(r => r.TokenHash)
+            .IsUnique();
+        modelBuilder.Entity<RecuperacionContrasena>()
+            .HasIndex(r => r.UsuarioId);
     }
 }

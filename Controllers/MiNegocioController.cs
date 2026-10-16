@@ -64,6 +64,45 @@ public class MiNegocioController : ControllerBase
         return Ok(new AparienciaDto(negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Slug, negocio.EsPrincipal));
     }
 
+    // "Estilos que dominamos": las etiquetas que ve el cliente en su inicio.
+    // Sin gate de módulo (como el horario): es contenido básico del negocio.
+    // Se valida acá y no solo en el front: máx. 12 etiquetas de hasta 30
+    // caracteres, sin repetidas (ignorando mayúsculas) ni vacías.
+    private const int MaxEstilos = 12;
+    private const int MaxLargoEstilo = 30;
+
+    [HttpGet("estilos")]
+    public async Task<ActionResult<EstilosDto>> GetEstilos()
+    {
+        var negocio = await _db.Negocios.FindAsync(NegocioId);
+        if (negocio is null) return NotFound();
+        return Ok(new EstilosDto(Negocio.ParseEstilos(negocio.EstilosDestacados)));
+    }
+
+    [HttpPut("estilos")]
+    public async Task<ActionResult<EstilosDto>> ActualizarEstilos(EstilosDto dto)
+    {
+        var negocio = await _db.Negocios.FindAsync(NegocioId);
+        if (negocio is null) return NotFound();
+
+        var limpios = (dto.Estilos ?? Array.Empty<string>())
+            .Select(e => Regex.Replace((e ?? "").Trim(), @"\s+", " "))
+            .Where(e => e.Length > 0)
+            .DistinctBy(e => e.ToLowerInvariant())
+            .ToArray();
+
+        if (limpios.Length > MaxEstilos)
+            return BadRequest($"Máximo {MaxEstilos} estilos.");
+        if (limpios.Any(e => e.Length > MaxLargoEstilo))
+            return BadRequest($"Cada estilo puede tener hasta {MaxLargoEstilo} caracteres.");
+
+        negocio.EstilosDestacados = limpios.Length == 0 ? null : string.Join("\n", limpios);
+        Auditoria.Registrar(_db, HttpContext.UsuarioActual()!, "Negocio", negocio.Id, negocio.Nombre, "Estilos destacados actualizados", limpios.Length > 0 ? string.Join(", ", limpios) : "Sin estilos");
+        await _db.SaveChangesAsync();
+
+        return Ok(new EstilosDto(limpios));
+    }
+
     // "Roles": qué módulos (de los que además permita el Plan, ver
     // Utils/Modulos.cs) puede ver un Barbero de este negocio -- el propio
     // Admin lo configura para su equipo, ver Roles.jsx. ModulosDisponibles

@@ -416,6 +416,9 @@ namespace misabarber.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("EstilosDestacados")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp without time zone");
 
@@ -502,6 +505,38 @@ namespace misabarber.Migrations
                     b.HasIndex("NegocioId");
 
                     b.ToTable("Productos");
+                });
+
+            modelBuilder.Entity("misabarber.Models.RecuperacionContrasena", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Creado")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("Expira")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UsadoEn")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId");
+
+                    b.ToTable("RecuperacionesContrasena");
                 });
 
             modelBuilder.Entity("misabarber.Models.Resena", b =>
@@ -694,6 +729,9 @@ namespace misabarber.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("EmailContacto")
                         .HasColumnType("text");
 
                     b.Property<string>("Estado")
@@ -947,6 +985,17 @@ namespace misabarber.Migrations
                         .IsRequired();
 
                     b.Navigation("Negocio");
+                });
+
+            modelBuilder.Entity("misabarber.Models.RecuperacionContrasena", b =>
+                {
+                    b.HasOne("misabarber.Models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("misabarber.Models.Resena", b =>

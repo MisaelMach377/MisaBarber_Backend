@@ -46,11 +46,16 @@ public record UsuarioDto(
     // slug). El front lo compara con el slug de la URL para no "adoptar" una
     // sesión guardada de OTRA barbería: el token vive en localStorage, que es
     // uno solo por origen (todas las barberías comparten dominio).
-    string? NegocioSlug = null
+    string? NegocioSlug = null,
+    // Correo de contacto/recuperación (ver Usuario.EmailContacto).
+    string? EmailContacto = null,
+    // "Estilos que dominamos" de SU negocio (ver Negocio.EstilosDestacados):
+    // viaja acá para que la pantalla del cliente lo pinte sin otro request.
+    string[]? NegocioEstilos = null
 );
 
-public record UsuarioCreateDto(string Nombre, string Email, string Password, string Rol, Guid? BarberoId, string? FotoUrl);
+public record UsuarioCreateDto(string Nombre, string Email, string Password, string Rol, Guid? BarberoId, string? FotoUrl, string? EmailContacto = null);
 
-public record UsuarioUpdateDto(string Nombre, string Email, string Rol, Guid? BarberoId, string? FotoUrl);
+public record UsuarioUpdateDto(string Nombre, string Email, string Rol, Guid? BarberoId, string? FotoUrl, string? EmailContacto = null);
 
 public record ResetearContrasenaDto(string ContrasenaNueva);

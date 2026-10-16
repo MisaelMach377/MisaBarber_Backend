@@ -24,6 +24,12 @@ public class Usuario
     // AuthController / UsuariosController). Se compara siempre en minúsculas.
     public string Email { get; set; } = string.Empty;
 
+    // Correo REAL donde llega "Olvidé mi contraseña". Aparte de Email a
+    // propósito: el Email es el usuario de acceso y puede no ser una
+    // bandeja (ej. "barbero1@mibarberia.com" inventado por el Admin). Null =
+    // se usa Email. Se lee en AuthController.OlvideContrasena.
+    public string? EmailContacto { get; set; }
+
     public string PasswordHash { get; set; } = string.Empty;
     public string? FotoUrl { get; set; }
 

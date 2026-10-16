@@ -48,6 +48,16 @@ public class Negocio
     // migración.
     public string Plan { get; set; } = "Pro";
 
+    // "Estilos que dominamos": etiquetas que el Admin elige y que el cliente
+    // ve en su pantalla de inicio (MiCuenta.jsx). Una por línea (los
+    // nombres pueden llevar comas, ej. "Corte, barba y cejas"). Null/vacío =
+    // la sección no se muestra. Ver MiNegocioController.Estilos y
+    // Negocio.ParseEstilos.
+    public string? EstilosDestacados { get; set; }
+
+    public static string[] ParseEstilos(string? raw) =>
+        (raw ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
     // Qué módulos (de los que además permita el Plan) puede ver un
     // Barbero de ESTE negocio -- lo configura el propio Admin desde
     // Roles.jsx, separado del Plan porque son dos preguntas distintas:

@@ -15,3 +15,13 @@ public record CambiarContrasenaDto(string ContrasenaActual, string ContrasenaNue
 // el primer paso, y no bloquea la creación de la cuenta. Slug: misma idea
 // que en LoginDto -- a qué barbería se está registrando este cliente.
 public record RegistroClienteDto(string Nombre, string Email, string? Telefono, string Password, string? Slug = null);
+
+// "Olvidé mi contraseña": paso 1 (pedir el link) y paso 2 (canjearlo).
+// Slug: a qué barbería pertenece el correo (mismo criterio que LoginDto).
+public record OlvideContrasenaDto(string Email, string? Slug = null);
+
+// Cambiar el propio correo de recuperación: pide la contraseña actual para
+// que una sesión robada no pueda redirigir la recuperación a otro correo.
+public record ActualizarContactoDto(string? EmailContacto, string ContrasenaActual);
+
+public record RestablecerContrasenaDto(string Token, string ContrasenaNueva);

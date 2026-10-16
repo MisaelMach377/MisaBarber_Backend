@@ -30,6 +30,8 @@ public record NegocioPublicoDto(string Nombre, string? LogoUrl, string ColorPrim
 public record AparienciaDto(string NombreNegocio, string? LogoUrl, string ColorPrimario, string? Slug, bool EsPrincipal);
 public record ActualizarAparienciaDto(string? LogoUrl, string ColorPrimario);
 
+public record EstilosDto(string[] Estilos);
+
 // Ubicación del local -- separado de Apariencia a propósito (mismo
 // criterio que el Horario en HorarioDtos.cs): no es un feature de Plan
 // Pro, es info operativa básica, así que MiNegocioController la expone

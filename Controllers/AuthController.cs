@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using misabarber.Data;
 using misabarber.DTOs;
 using misabarber.Models;
+using misabarber.Services;
 using misabarber.Utils;
 
 namespace misabarber.Controllers;
@@ -13,11 +16,17 @@ public class AuthController : ControllerBase
 {
     private readonly MisaBarberContext _db;
     private readonly IConfiguration _config;
+    private readonly EmailService _email;
+    private readonly ILogger<AuthController> _log;
+    private readonly IWebHostEnvironment _env;
 
-    public AuthController(MisaBarberContext db, IConfiguration config)
+    public AuthController(MisaBarberContext db, IConfiguration config, EmailService email, ILogger<AuthController> log, IWebHostEnvironment env)
     {
         _db = db;
         _config = config;
+        _email = email;
+        _log = log;
+        _env = env;
     }
 
     private string Secreto => _config["Jwt:Secret"]
@@ -40,7 +49,9 @@ public class AuthController : ControllerBase
             u.Id, u.Nombre, u.Email, u.FotoUrl, u.Rol, u.BarberoId, u.Barbero?.Nombre, u.ClienteId, u.Estado, u.FechaCreacion,
             negocio.Nombre, negocio.LogoUrl, negocio.ColorPrimario, negocio.Plan, ModulosPara(u, negocio), horario, negocio.Direccion,
             negocio.Latitud, negocio.Longitud,
-            negocio.EsPrincipal ? null : negocio.Slug
+            negocio.EsPrincipal ? null : negocio.Slug,
+            u.EmailContacto,
+            Negocio.ParseEstilos(negocio.EstilosDestacados)
         );
     }
 
@@ -92,6 +103,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponseDto>> Login(LoginDto dto)
     {
         var negocio = await ResolverNegocio(dto.Slug);
@@ -122,6 +134,7 @@ public class AuthController : ControllerBase
     // cualquier signup moderno -- no tiene sentido mandar al cliente de
     // vuelta al formulario de login después de que ya escribió su clave.
     [HttpPost("registro")]
+    [EnableRateLimiting("registro")]
     public async Task<ActionResult<LoginResponseDto>> Registro(RegistroClienteDto dto)
     {
         var negocio = await ResolverNegocio(dto.Slug);
@@ -291,5 +304,169 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    // Cambia el correo de recuperación de la propia cuenta. Exige la
+    // contraseña actual (ver ActualizarContactoDto). Vacío = volver a usar
+    // el correo de acceso.
+    [HttpPut("contacto")]
+    [RequiereAuth]
+    public async Task<ActionResult<object>> ActualizarContacto(ActualizarContactoDto dto)
+    {
+        var actual = HttpContext.UsuarioActual()!;
+        var usuario = await _db.Usuarios.FindAsync(actual.Id);
+        if (usuario is null) return Unauthorized();
+
+        if (!PasswordHasher.Verify(dto.ContrasenaActual ?? "", usuario.PasswordHash))
+            return BadRequest("La contraseña actual no es correcta.");
+
+        if (!UsuariosController.TryContacto(dto.EmailContacto, out var contacto))
+            return BadRequest("El correo de contacto no es válido.");
+
+        usuario.EmailContacto = contacto;
+        await _db.SaveChangesAsync();
+        return Ok(new { emailContacto = contacto });
+    }
+
+    // ---- Olvidé mi contraseña ----
+    // Paso 1: la persona escribe su correo. La respuesta es SIEMPRE la misma
+    // exista o no la cuenta (y tarde lo mismo: el correo se manda en segundo
+    // plano), para que nadie use este endpoint para averiguar qué correos
+    // están registrados. Anti-spam: además del límite por IP, un usuario no
+    // recibe más de 3 links por hora ni uno nuevo antes de 60 s.
+    private static string Hash(string token) =>
+        Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token)));
+
+    private const string RespuestaGenerica = "Si ese correo está registrado, te enviamos un link para restablecer tu contraseña. Revisa tu bandeja (y spam).";
+
+    [HttpPost("olvide-contrasena")]
+    [EnableRateLimiting("recuperar")]
+    public async Task<IActionResult> OlvideContrasena(OlvideContrasenaDto dto)
+    {
+        var email = (dto.Email ?? "").Trim().ToLower();
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            return BadRequest("Ingresa un correo válido.");
+
+        var negocio = await ResolverNegocio(dto.Slug);
+        // Los logs de abajo son SOLO del servidor (la respuesta al cliente es
+        // siempre la misma, a propósito): sirven para diagnosticar por qué
+        // no salió un correo sin filtrarle a nadie si la cuenta existe.
+        if (negocio is null)
+        {
+            _log.LogInformation("Recuperación: no existe un negocio activo para el slug '{Slug}'.", dto.Slug);
+            return Ok(new { mensaje = RespuestaGenerica });
+        }
+
+        var usuario = await _db.Usuarios
+            .FirstOrDefaultAsync(u => u.NegocioId == negocio.Id && u.Email.ToLower() == email && u.Estado == "Activo");
+        if (usuario is null)
+        {
+            _log.LogInformation("Recuperación: no hay un usuario ACTIVO con el correo de acceso '{Email}' en el negocio '{Negocio}'.", email, negocio.Nombre);
+            return Ok(new { mensaje = RespuestaGenerica });
+        }
+
+        var ahora = DateTime.UtcNow;
+        var recientes = await _db.RecuperacionesContrasena
+            .Where(r => r.UsuarioId == usuario.Id && r.Creado > ahora.AddHours(-1))
+            .Select(r => r.Creado)
+            .ToListAsync();
+        if (recientes.Count >= 3 || recientes.Any(c => c > ahora.AddSeconds(-60)))
+        {
+            _log.LogInformation("Recuperación: omitida por límite (máx. 3 por hora y 1 cada 60 s) para '{Email}'.", email);
+            return Ok(new { mensaje = RespuestaGenerica });
+        }
+
+        // 32 bytes aleatorios criptográficos (256 bits) en base64url: imposible de adivinar.
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+        _db.RecuperacionesContrasena.Add(new RecuperacionContrasena
+        {
+            UsuarioId = usuario.Id,
+            TokenHash = Hash(token),
+            Creado = ahora,
+            Expira = ahora.AddMinutes(30),
+        });
+        await _db.SaveChangesAsync();
+
+        var origen = (_config["Cors:FrontendOrigin"] ?? "http://localhost:5173").TrimEnd('/');
+        var ruta = negocio.EsPrincipal || string.IsNullOrEmpty(negocio.Slug) ? "" : $"/{negocio.Slug}";
+        var link = $"{origen}{ruta}/restablecer?token={token}";
+        var nombreNegocio = System.Net.WebUtility.HtmlEncode(negocio.Nombre);
+        var nombreUsuario = System.Net.WebUtility.HtmlEncode(usuario.Nombre);
+        // Color de la barbería para el botón (solo si es un #hex válido: va dentro de un style).
+        var color = System.Text.RegularExpressions.Regex.IsMatch(negocio.ColorPrimario ?? "", "^#[0-9a-fA-F]{6}$")
+            ? negocio.ColorPrimario! : "#111111";
+        var html = $@"<!doctype html><html><body style=""margin:0;padding:0;background:#f4f4f5"">
+<div style=""display:none;max-height:0;overflow:hidden"">Tu link para crear una nueva contraseña vence en 30 minutos.</div>
+<table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""background:#f4f4f5;padding:32px 12px"">
+ <tr><td align=""center"">
+  <table role=""presentation"" width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""max-width:480px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#18181b"">
+   <tr><td style=""background:{color};padding:22px 28px;color:#ffffff;font-size:18px;font-weight:700"">{nombreNegocio}</td></tr>
+   <tr><td style=""padding:30px 28px 8px"">
+     <h1 style=""margin:0 0 12px;font-size:22px;line-height:1.3"">Restablece tu contraseña</h1>
+     <p style=""margin:0 0 22px;font-size:15px;line-height:1.6;color:#3f3f46"">Hola {nombreUsuario}, recibimos una solicitud para cambiar la contraseña de tu cuenta. Toca el botón para elegir una nueva.</p>
+     <p style=""margin:0 0 24px""><a href=""{link}"" style=""display:inline-block;background:{color};color:#ffffff;padding:14px 26px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px"">Crear nueva contraseña</a></p>
+     <p style=""margin:0 0 6px;font-size:13px;line-height:1.6;color:#71717a"">El link vence en <strong>30 minutos</strong> y solo funciona una vez.</p>
+     <p style=""margin:0 0 22px;font-size:13px;line-height:1.6;color:#71717a"">Si no fuiste tú, ignora este correo: tu contraseña no cambia.</p>
+   </td></tr>
+   <tr><td style=""padding:16px 28px 26px;border-top:1px solid #e4e4e7;font-size:12px;line-height:1.6;color:#a1a1aa"">
+     ¿El botón no funciona? Copia este link en tu navegador:<br><span style=""word-break:break-all;color:#71717a"">{link}</span>
+   </td></tr>
+  </table>
+ </td></tr>
+</table></body></html>";
+
+        // Segundo plano: así la respuesta no tarda distinto según exista o no la cuenta.
+        // Va al correo de contacto si lo configuraron; si no, al de acceso.
+        var para = string.IsNullOrWhiteSpace(usuario.EmailContacto) ? usuario.Email : usuario.EmailContacto;
+        var asunto = $"Restablece tu contraseña - {negocio.Nombre}";
+        _log.LogInformation("Recuperación: enviando correo a '{Para}' (cuenta '{Email}').", para, email);
+        if (_env.IsDevelopment())
+            _log.LogWarning("[DEV] Link de recuperación: {Link}", link);
+        _ = Task.Run(async () =>
+        {
+            var ok = await _email.EnviarAsync(para, asunto, html);
+            if (ok) _log.LogInformation("Recuperación: Brevo aceptó el correo para '{Para}'.", para);
+        });
+
+        return Ok(new { mensaje = RespuestaGenerica });
+    }
+
+    // Paso 2: canjear el token del correo por una contraseña nueva. Token
+    // inexistente, vencido o ya usado dan el MISMO error. Al canjear se
+    // invalidan todos los links pendientes del usuario, y se inicia sesión.
+    [HttpPost("restablecer-contrasena")]
+    [EnableRateLimiting("restablecer")]
+    public async Task<ActionResult<LoginResponseDto>> RestablecerContrasena(RestablecerContrasenaDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.ContrasenaNueva) || dto.ContrasenaNueva.Length < 6)
+            return BadRequest("La contraseña debe tener al menos 6 caracteres.");
+
+        const string linkInvalido = "El link no es válido o ya venció. Pide uno nuevo.";
+        if (string.IsNullOrWhiteSpace(dto.Token)) return BadRequest(linkInvalido);
+
+        var hash = Hash(dto.Token.Trim());
+        var ahora = DateTime.UtcNow;
+        var rec = await _db.RecuperacionesContrasena
+            .FirstOrDefaultAsync(r => r.TokenHash == hash && r.UsadoEn == null && r.Expira > ahora);
+        if (rec is null) return BadRequest(linkInvalido);
+
+        var usuario = await _db.Usuarios.Include(u => u.Barbero).FirstOrDefaultAsync(u => u.Id == rec.UsuarioId);
+        if (usuario is null || usuario.Estado != "Activo") return BadRequest(linkInvalido);
+
+        var negocio = await _db.Negocios.FirstOrDefaultAsync(n => n.Id == usuario.NegocioId && n.Estado == "Activo");
+        if (negocio is null) return BadRequest(linkInvalido);
+
+        usuario.PasswordHash = PasswordHasher.Hash(dto.ContrasenaNueva);
+
+        var pendientes = await _db.RecuperacionesContrasena
+            .Where(r => r.UsuarioId == usuario.Id && r.UsadoEn == null).ToListAsync();
+        foreach (var p in pendientes) p.UsadoEn = ahora;
+
+        await _db.SaveChangesAsync();
+
+        var token = JwtHelper.Generar(ToClaims(usuario), Secreto);
+        return Ok(new LoginResponseDto(token, await ToDto(usuario, negocio)));
     }
 }
